@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Intern Track - LinkedIn Importer",
+  "version": "1.0.0",
+  "description": "Importa le offerte di lavoro da LinkedIn direttamente in Intern Track con un solo clic.",
+  "permissions": ["activeTab", "scripting"],
+  "host_permissions": ["*://*.linkedin.com/*"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Invia a Intern Track"
+  }
+}

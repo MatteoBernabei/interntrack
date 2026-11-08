@@ -1,0 +1,6 @@
+{
+  "name": "Intertracker - Job & Internship Dashboard",
+  "description": "Glassmorphic job application tracker and career pipeline dashboard with real-time analytics, compensation comparison, interview prep, and AI career assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

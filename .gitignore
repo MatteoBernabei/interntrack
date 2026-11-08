@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Dati e configurazioni personali: non vanno mai nel repository
+firebase-applet-config.json
+src/data/private/
+.vercel
+.aistudio/
+*.local
