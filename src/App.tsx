@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { appLang, tr, translateTo } from './i18n';
 import { LanguageSwitch, useAppLang } from './i18n/LanguageSwitch';
-import { db, auth, loginWithGoogle, logoutUser, onAuthStateChanged, testConnection, User, getAccessToken, getConnectedAccounts } from './firebase';
+import { db, auth, loginWithGoogle, logoutUser, onAuthStateChanged, testConnection, User, getAccessToken, getConnectedAccounts, isFirebaseConfigured } from './firebase';
 import { collection, doc, setDoc, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { LOGO_W, LOGO_B } from './data/mockupLogos';
 import { CompanyLogoModal } from './components/CompanyLogoModal';
@@ -87,6 +87,55 @@ import {
 // Email di riferimento per i link mailto quando non si è loggati (configurabile con VITE_OWNER_EMAIL)
 const OWNER_EMAIL_FALLBACK = ((import.meta as any).env?.VITE_OWNER_EMAIL as string) || 'demo@example.com';
 
+// DEMO = Firebase not configured (public portfolio demo): sample data everywhere.
+// Real mode (Firebase configured): the app starts EMPTY and shows only the user's own data.
+const DEMO = !isFirebaseConfigured;
+const sample = <T,>(demoValue: T, realValue: T): T => (DEMO ? demoValue : realValue);
+
+// One-time cleanup: in real mode, drop sample data that an earlier build may have cached in this browser.
+if (!DEMO) {
+  try {
+    if (!localStorage.getItem('interntrack_real_mode_v1')) {
+      ['intern_track_apps', 'hub_coda_items_cache_v3', 'hub_processed_companies_cache_v3', 'intern_track_gmail_accounts'].forEach((k) =>
+        localStorage.removeItem(k)
+      );
+      localStorage.setItem('interntrack_real_mode_v1', '1');
+    }
+  } catch {
+    // storage unavailable
+  }
+}
+
+// "€1.400/m" -> 1400
+const parseComp = (v: string): number => {
+  const m = (v || '').replace(/\./g, '').match(/\d{3,6}/);
+  return m ? Number(m[0]) : 0;
+};
+const eur = (n: number): string => '€' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+// Placeholder used by the CV / cover letter / simulator tools while the tracker is still empty
+// Search profile used as the starting point (and for "restore defaults"). In real mode the personal fields start empty.
+const BASE_SEARCH_CONFIG = DEMO
+  ? INITIAL_SEARCH_CONFIG
+  : {
+      ...INITIAL_SEARCH_CONFIG,
+      userProfile: {
+        ...INITIAL_SEARCH_CONFIG.userProfile,
+        fullName: '',
+        emailPrimary: '',
+        emailSecondary: '',
+        objective: '',
+        targetAvailableFrom: '',
+        targetRolesSummary: '',
+        education: '',
+        languages: [] as Array<{ language: string; level: string }>,
+        flagLanguagesInAds: [] as string[],
+      },
+    };
+const EMPTY_APP: MockApp = {
+  id: '', co: '', role: '', st: 'todo', fit: 0, city: '', country: '', mode: '', pl: '', nx: ['—', 'info'], comp: '—', sent: '—', prio: 'Media', act: 'sent',
+};
+
 // Sample cover letter shown before the user edits it (Italian source; translated by the i18n dictionary).
 const DEFAULT_LETTER_IT = `Gentile Team Talent di Logistica OS,\n\nDesidero sottoporre la mia candidatura per la posizione di Founders Associate Intern. Il mio percorso in Management Engineering con Master in Innovation & Entrepreneurship presso una business school europea, unito alla passione per le operazioni ad alto impatto tecnologico, è perfettamente allineato alla vostra missione.\n\nDurante gli studi ho guidato il progetto di go-to-market per un prodotto tecnologico innovativo e ottenuto un riconoscimento in una competizione di business. Ho solide competenze nell'analisi dati tramite Python ed Excel avanzato e un approccio orientato alla risoluzione rapida di problemi operativi.\n\nSarei entusiasta di contribuire alla crescita e all'efficienza operativa di Logistica OS.\n\nCordiali saluti,\nAlex Rossi`;
 
@@ -129,10 +178,10 @@ export default function App() {
   // Scadenze filters & Dynamic Deadlines state (automazione follow-up a 7 giorni)
   const [sf, setSf] = useState<string>('all');
   const [pf, setPf] = useState<string>('all');
-  const [deadlines, setDeadlines] = useState<MockDeadline[]>(INITIAL_DEADLINES);
+  const [deadlines, setDeadlines] = useState<MockDeadline[]>(sample(INITIAL_DEADLINES, []));
 
   // Dynamic Notifications state (updated also by Gmail sync)
-  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; desc: string; date: string; unread: boolean }>>([
+  const [notifications, setNotifications] = useState<Array<{ id: string; title: string; desc: string; date: string; unread: boolean }>>(!DEMO ? [] : [
     {
       id: 'n1',
       title: 'Controllo Posta completato',
@@ -159,7 +208,7 @@ export default function App() {
   // Firebase Cloud Auth & Database Sync State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   // Nome mostrato nell'interfaccia: arriva dall'account Google con cui si accede
-  const userFullName = currentUser?.displayName?.trim() || (currentUser?.email ? currentUser.email.split('@')[0] : 'Alex Rossi');
+  const userFullName = currentUser?.displayName?.trim() || (currentUser?.email ? currentUser.email.split('@')[0] : sample('Alex Rossi', 'Ospite'));
   const userFirstName = userFullName.split(' ')[0];
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
 
@@ -178,7 +227,7 @@ export default function App() {
         setQuickTaskAccountSelect(user.email);
         setNewEventAccount(user.email);
       } else {
-        setActiveWorkspaceAccount('demo@example.com');
+        setActiveWorkspaceAccount(sample('demo@example.com', ''));
       }
     });
     return () => unsubscribe();
@@ -190,7 +239,7 @@ export default function App() {
   // Dynamic Workspace Accounts: uses dynamically connected accounts from OAuth or authenticated user
   const WORKSPACE_ACCOUNTS = useMemo(() => {
     if (!currentUser?.email) {
-      return ['demo@example.com'];
+      return sample(['demo@example.com'], [] as string[]);
     }
     const accounts = getConnectedAccounts();
     if (accounts.length > 0) {
@@ -199,8 +248,8 @@ export default function App() {
     return [currentUser.email];
   }, [currentUser]);
 
-  const [activeWorkspaceAccount, setActiveWorkspaceAccount] = useState<string>('demo@example.com');
-  const [googleCalendarEvents, setGoogleCalendarEvents] = useState<GoogleCalendarEvent[]>([
+  const [activeWorkspaceAccount, setActiveWorkspaceAccount] = useState<string>(sample('demo@example.com', ''));
+  const [googleCalendarEvents, setGoogleCalendarEvents] = useState<GoogleCalendarEvent[]>(!DEMO ? [] : [
     {
       id: 'gcal-init-1',
       summary: '🗓 HR Screening · Logistica OS',
@@ -218,7 +267,7 @@ export default function App() {
       accountEmail: 'demo@example.com',
     },
   ]);
-  const [googleTasksList, setGoogleTasksList] = useState<GoogleTaskItem[]>([
+  const [googleTasksList, setGoogleTasksList] = useState<GoogleTaskItem[]>(!DEMO ? [] : [
     {
       id: 'gt-init-1',
       title: 'Inviare candidatura a Logistica OS (Founders Associate)',
@@ -245,7 +294,7 @@ export default function App() {
     },
   ]);
   const [isWorkspaceSyncing, setIsWorkspaceSyncing] = useState<boolean>(false);
-  const [lastWorkspaceSyncTime, setLastWorkspaceSyncTime] = useState<string | null>('Oggi alle 14:30');
+  const [lastWorkspaceSyncTime, setLastWorkspaceSyncTime] = useState<string | null>(sample('Oggi alle 14:30', null));
 
   // Confirmation Modal state for Workspace mutations (strictly required by guidelines)
   const [confirmModalData, setConfirmModalData] = useState<{
@@ -262,7 +311,7 @@ export default function App() {
   // Quick Task Input in Calendar & Tasks view
   const [quickTaskTitleInput, setQuickTaskTitleInput] = useState<string>('');
   const [quickTaskDateInput, setQuickTaskDateInput] = useState<string>('Oggi');
-  const [quickTaskAccountSelect, setQuickTaskAccountSelect] = useState<string>('demo@example.com');
+  const [quickTaskAccountSelect, setQuickTaskAccountSelect] = useState<string>(sample('demo@example.com', ''));
 
   // Welcome & Multi-Account Hub Modal State
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState<boolean>(false);
@@ -276,7 +325,7 @@ export default function App() {
       const saved = localStorage.getItem('intern_track_apps');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return INITIAL_MOCK_APPS;
+    return sample(INITIAL_MOCK_APPS, []);
   });
 
   // Custom Company Logos Database (lowercased company name -> data URI / image URL)
@@ -294,7 +343,7 @@ export default function App() {
   // Gmail Monitor Modal State
   const [isGmailModalOpen, setIsGmailModalOpen] = useState<boolean>(false);
   const [gmailScanning, setGmailScanning] = useState<boolean>(false);
-  const [recruiterMessages, setRecruiterMessages] = useState<RecruiterEmailMessage[]>(MOCK_RECRUITER_MESSAGES);
+  const [recruiterMessages, setRecruiterMessages] = useState<RecruiterEmailMessage[]>(sample(MOCK_RECRUITER_MESSAGES, []));
   const [appliedRecruiterActions, setAppliedRecruiterActions] = useState<Set<string>>(new Set());
 
   // Save apps to localStorage whenever they change
@@ -304,39 +353,117 @@ export default function App() {
     } catch (e) {}
   }, [apps]);
 
-  // Sync with Firestore when user is logged in
-  useEffect(() => {
-    if (!currentUser) return;
-    const userAppsRef = collection(db, 'users', currentUser.uid, 'applications');
+  // ---- Values shown in real mode, computed from the user's own applications ----
+  const rmSent = apps.filter((a) => a.st !== 'todo').length;
+  const rmInterviews = apps.filter((a) => a.st === 'interview' || a.st === 'offer').length;
+  const rmToApply = apps.filter((a) => a.st === 'todo').length;
+  const rmActive = apps.filter((a) => a.st !== 'rejected').length;
+  const rmRate = rmSent ? Math.round((rmInterviews * 100) / rmSent) : 0;
+  const rmComps = apps.map((a) => parseComp(a.comp)).filter((n) => n > 0);
+  const rmAvg = rmComps.length ? Math.round(rmComps.reduce((sum, n) => sum + n, 0) / rmComps.length) : 0;
+  const rmPeak = rmComps.length ? Math.max(...rmComps) : 0;
+  const rmInterviewApps = apps.filter((a) => a.st === 'interview').slice(0, 3);
+  const rmNextApps = apps.filter((a) => a.act === 'send' || a.act === 'follow').slice(0, 3);
+  const rmToday = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+  const [calMonthOffset, setCalMonthOffset] = useState<number>(0);
+  const rmCal = useMemo(() => {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth() + calMonthOffset, 1);
+    const y = first.getFullYear();
+    const m = first.getMonth();
+    const label = first.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+    return {
+      y,
+      m,
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+      lead: (first.getDay() + 6) % 7, // Monday = 0
+      daysInMonth: new Date(y, m + 1, 0).getDate(),
+      todayKey: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`,
+    };
+  }, [calMonthOffset]);
 
-    // Attach real-time snapshot listener for applications
+  // ---- Cloud sync of the applications (Firestore, users/{uid}/applications) ----
+  // Every change made while signed in is saved automatically (only the changed documents are written).
+  const cloudReadyRef = useRef(false);
+  const uploadingRef = useRef(false); // true while a batch upload is running: ignore snapshots meanwhile
+  const lastSyncedRef = useRef<Map<string, string>>(new Map());
+  const appsRef = useRef<MockApp[]>(apps);
+  const [cloudTick, setCloudTick] = useState<number>(0);
+  useEffect(() => {
+    appsRef.current = apps;
+  }, [apps]);
+
+  const appKey = (a: MockApp) =>
+    JSON.stringify([a.co, a.role, a.city, a.country, a.mode, a.st, a.fit, a.pl, a.nx, a.comp, a.sent, a.prio, a.act]);
+  const appToDoc = (uid: string, a: MockApp) => ({
+    userId: uid,
+    co: a.co ?? '',
+    role: a.role ?? '',
+    city: a.city ?? '',
+    country: a.country ?? '',
+    mode: a.mode ?? '',
+    st: a.st ?? 'todo',
+    fit: typeof a.fit === 'number' ? a.fit : 0,
+    pl: a.pl ?? '',
+    nx: Array.isArray(a.nx) ? a.nx : ['—', 'info'],
+    comp: a.comp ?? '—',
+    sent: a.sent ?? '—',
+    prio: a.prio ?? 'Media',
+    act: a.act ?? 'sent',
+    updatedAt: new Date().toISOString(),
+  });
+  const docToApp = (id: string, data: any): MockApp => ({
+    id,
+    co: data.co || 'Azienda',
+    role: data.role || '',
+    city: data.city || '',
+    country: data.country || '',
+    mode: data.mode || '',
+    st: data.st || 'applied',
+    fit: typeof data.fit === 'number' ? data.fit : 0,
+    pl: data.pl || '',
+    nx: (Array.isArray(data.nx) && data.nx.length === 2 ? [String(data.nx[0]), String(data.nx[1])] : ['—', 'info']) as [string, string],
+    comp: data.comp || '—',
+    sent: data.sent || '—',
+    prio: data.prio || 'Media',
+    act: data.act || 'sent',
+  });
+
+  useEffect(() => {
+    cloudReadyRef.current = false;
+    if (!currentUser) return;
+    const uid = currentUser.uid;
+    const userAppsRef = collection(db, 'users', uid, 'applications');
+
     const unsubscribeApps = onSnapshot(
       userAppsRef,
       (snapshot) => {
-        if (!snapshot.empty) {
-          const loadedApps: MockApp[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data();
-            loadedApps.push({
-              id: docSnap.id,
-              co: data.co || 'Azienda',
-              role: data.role || 'Founders Associate',
-              city: data.city || 'Milano',
-              country: data.country || 'Italia',
-              mode: data.mode || 'Ibrido',
-              st: data.st || 'applied',
-              fit: typeof data.fit === 'number' ? data.fit : 90,
-              pl: data.pl || 'LinkedIn',
-              nx: (Array.isArray(data.nx) && data.nx.length === 2
-                ? [String(data.nx[0]), String(data.nx[1])]
-                : ['⏱ In attesa feedback', 'info']) as [string, string],
-              comp: data.comp || '—',
-              sent: data.sent || '—',
-              prio: data.prio || 'Alta',
-              act: data.act || 'sent',
-            });
-          });
-          setApps(loadedApps);
+        if (snapshot.metadata.hasPendingWrites || uploadingRef.current) return; // echo of our own local writes
+        if (snapshot.metadata.fromCache && !cloudReadyRef.current) return; // wait for the server before trusting an empty cache
+        const loaded: MockApp[] = [];
+        snapshot.forEach((docSnap) => loaded.push(docToApp(docSnap.id, docSnap.data())));
+        if (!cloudReadyRef.current) {
+          // First load of this session
+          let owner: string | null = null;
+          try {
+            owner = localStorage.getItem('intern_track_apps_owner');
+          } catch (e) {}
+          const local = appsRef.current;
+          if (loaded.length === 0 && local.length > 0 && (owner === null || owner === uid)) {
+            // Data created before the first sign-in: upload it
+            lastSyncedRef.current = new Map();
+          } else {
+            setApps(loaded);
+            lastSyncedRef.current = new Map(loaded.map((a) => [a.id, appKey(a)]));
+          }
+          try {
+            localStorage.setItem('intern_track_apps_owner', uid);
+          } catch (e) {}
+          cloudReadyRef.current = true;
+          setCloudTick((n) => n + 1);
+        } else {
+          setApps(loaded);
+          lastSyncedRef.current = new Map(loaded.map((a) => [a.id, appKey(a)]));
         }
       },
       (error) => {
@@ -360,6 +487,38 @@ export default function App() {
       unsubscribeLogos();
     };
   }, [currentUser]);
+
+  // Save to the cloud only what changed
+  useEffect(() => {
+    if (!currentUser || !cloudReadyRef.current) return;
+    const uid = currentUser.uid;
+    const last = lastSyncedRef.current;
+    const now = new Map(apps.map((a) => [a.id, appKey(a)]));
+    const writes = apps.filter((a) => last.get(a.id) !== now.get(a.id));
+    const deletes = [...last.keys()].filter((id) => !now.has(id));
+    if (writes.length === 0 && deletes.length === 0) return;
+    lastSyncedRef.current = now;
+    uploadingRef.current = true;
+    (async () => {
+      try {
+        const ops: Array<(b: ReturnType<typeof writeBatch>) => void> = [
+          ...writes.map((a) => (b: ReturnType<typeof writeBatch>) => b.set(doc(db, 'users', uid, 'applications', a.id), appToDoc(uid, a))),
+          ...deletes.map((id) => (b: ReturnType<typeof writeBatch>) => b.delete(doc(db, 'users', uid, 'applications', id))),
+        ];
+        for (let i = 0; i < ops.length; i += 400) {
+          const batch = writeBatch(db);
+          ops.slice(i, i + 400).forEach((op) => op(batch));
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn('Cloud sync failed:', err);
+        lastSyncedRef.current = last;
+        showToast('Salvataggio su cloud non riuscito: i dati restano in questo browser');
+      } finally {
+        uploadingRef.current = false;
+      }
+    })();
+  }, [apps, currentUser, cloudTick]);
 
   // Handlers for Custom Company Logo Upload & Removal
   const handleSaveCompanyLogo = async (company: string, logoUrl: string) => {
@@ -489,7 +648,7 @@ export default function App() {
     type: 'interview' | 'rejected';
     receivedAt: string;
   }
-  const [unmatchedEmails, setUnmatchedEmails] = useState<UnmatchedEmail[]>([
+  const [unmatchedEmails, setUnmatchedEmails] = useState<UnmatchedEmail[]>(!DEMO ? [] : [
     {
       id: 'unm-1',
       sender: 'talent@stripe.com',
@@ -508,7 +667,7 @@ export default function App() {
   const [newEventDate, setNewEventDate] = useState<string>('6 Nov');
   const [newEventTime, setNewEventTime] = useState<string>('15:00');
   const [newEventDesc, setNewEventDesc] = useState<string>('');
-  const [newEventAccount, setNewEventAccount] = useState<string>('demo@example.com');
+  const [newEventAccount, setNewEventAccount] = useState<string>(sample('demo@example.com', ''));
   const [syncToGoogleCal, setSyncToGoogleCal] = useState<boolean>(true);
   const [syncToGoogleTasksAlso, setSyncToGoogleTasksAlso] = useState<boolean>(true);
 
@@ -522,7 +681,7 @@ export default function App() {
   const [clAppId, setClAppId] = useState<string>('lo');
   const [clLang, setClLang] = useState<'it' | 'en'>(appLang === 'en' ? 'en' : 'it');
   const [clTone, setClTone] = useState<'startup' | 'corporate' | 'academic'>('startup');
-  const [clDraft, setClDraft] = useState<string>(() => tr(DEFAULT_LETTER_IT));
+  const [clDraft, setClDraft] = useState<string>(() => (DEMO ? tr(DEFAULT_LETTER_IT) : ''));
   const uiLang = useAppLang();
   // keep the untouched sample letter in the language currently selected
   useEffect(() => {
@@ -533,7 +692,7 @@ export default function App() {
 
   // AI Tools: Interview Simulator state
   const [simAppId, setSimAppId] = useState<string>('lo');
-  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'me' | 'ai'; text: string }>>([
+  const [chatMessages, setChatMessages] = useState<Array<{ sender: 'me' | 'ai'; text: string }>>(!DEMO ? [{ sender: 'ai', text: 'Ciao! Sono il tuo simulatore di colloqui. Scegli una candidatura e iniziamo.' }] : [
     {
       sender: 'ai',
       text: 'Ciao Alex! Sono il tuo simulatore sartoriale di colloqui. Ho analizzato il tuo CV (MSc) e i requisiti per "Founders Associate Intern" presso Logistica OS. Iniziamo con una domanda chiave: "Vedo che hai curato il go-to-market di un prodotto tecnologico innovativo. Come applicheresti la stessa metodologia per scalare la nostra supply chain?"',
@@ -552,9 +711,9 @@ export default function App() {
 
   // Gemini Automation & Daily Suggestions State
   const [sugSubTab, setSugSubTab] = useState<'today' | 'history' | 'queue' | 'daily' | 'scaleups' | 'hub' | 'settings' | 'preferences'>('today');
-  const [scaleups, setScaleups] = useState<MockScaleupItem[]>(INITIAL_SCALEUP_DATA);
-  const [dailyCompanies, setDailyCompanies] = useState<MockDailyCompany[]>(INITIAL_DAILY_COMPANIES);
-  const [dailyPeople, setDailyPeople] = useState<MockDailyPerson[]>(INITIAL_DAILY_PEOPLE);
+  const [scaleups, setScaleups] = useState<MockScaleupItem[]>(sample(INITIAL_SCALEUP_DATA, []));
+  const [dailyCompanies, setDailyCompanies] = useState<MockDailyCompany[]>(sample(INITIAL_DAILY_COMPANIES, []));
+  const [dailyPeople, setDailyPeople] = useState<MockDailyPerson[]>(sample(INITIAL_DAILY_PEOPLE, []));
   const [scaleupFilterSector, setScaleupFilterSector] = useState<string>('all');
   const [scaleupFilterCity, setScaleupFilterCity] = useState<string>('all');
   const [scaleupSearchQuery, setScaleupSearchQuery] = useState<string>('');
@@ -666,7 +825,7 @@ export default function App() {
       const saved = localStorage.getItem('intern_track_search_config');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return INITIAL_SEARCH_CONFIG;
+    return BASE_SEARCH_CONFIG;
   });
 
   // Persist search config to localStorage
@@ -682,7 +841,7 @@ export default function App() {
       const saved = localStorage.getItem('hub_coda_items_cache_v3');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return INITIAL_HUB_CODA;
+    return sample(INITIAL_HUB_CODA, []);
   });
 
   useEffect(() => {
@@ -696,7 +855,7 @@ export default function App() {
       const saved = localStorage.getItem('hub_processed_companies_cache_v3');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return PROCESSED_COMPANIES_REGISTRY;
+    return sample(PROCESSED_COMPANIES_REGISTRY, []);
   });
 
   useEffect(() => {
@@ -1252,7 +1411,7 @@ export default function App() {
       const saved = localStorage.getItem('intern_track_gmail_accounts');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return INITIAL_GMAIL_ACCOUNTS;
+    return sample(INITIAL_GMAIL_ACCOUNTS, []);
   });
 
   // Save Gmail accounts to localStorage
@@ -1824,7 +1983,7 @@ export default function App() {
 
   // Reset Search Config to Initial Default
   const handleResetSearchConfig = () => {
-    setSearchConfig(INITIAL_SEARCH_CONFIG);
+    setSearchConfig(BASE_SEARCH_CONFIG);
     try {
       localStorage.removeItem('intern_track_search_config');
     } catch (e) {}
@@ -2270,17 +2429,17 @@ export default function App() {
           setRecruiterMessages(live);
           showToast(`Trovate ${live.length} comunicazioni recruiter da Gmail`);
         } else {
-          setRecruiterMessages(MOCK_RECRUITER_MESSAGES);
+          setRecruiterMessages(sample(MOCK_RECRUITER_MESSAGES, []));
           showToast('Nessuna nuova email non letta: mostro comunicazioni recenti');
         }
       } else {
         setTimeout(() => {
-          setRecruiterMessages(MOCK_RECRUITER_MESSAGES);
+          setRecruiterMessages(sample(MOCK_RECRUITER_MESSAGES, []));
           showToast('Scansione completata (modalità portfolio)');
         }, 400);
       }
     } catch (e) {
-      setRecruiterMessages(MOCK_RECRUITER_MESSAGES);
+      setRecruiterMessages(sample(MOCK_RECRUITER_MESSAGES, []));
       showToast('Scansione con dati dimostrativi di portfolio completata');
     } finally {
       setGmailScanning(false);
@@ -2803,7 +2962,7 @@ export default function App() {
     lang: 'it' | 'en' = clLang,
     tone: 'startup' | 'corporate' | 'academic' = clTone
   ) => {
-    const target = apps.find((a) => a.id === targetAppId) || apps[0];
+    const target = apps.find((a) => a.id === targetAppId) || apps[0] || EMPTY_APP;
     if (!target) return;
 
     setIsGeneratingCl(true);
@@ -2838,7 +2997,7 @@ export default function App() {
 
   // Real Gemini CV Match & Gap Analysis
   const handleAnalyzeCvWithAi = async () => {
-    const target = apps.find((a) => a.id === cvSelectedAppId) || apps[0];
+    const target = apps.find((a) => a.id === cvSelectedAppId) || apps[0] || EMPTY_APP;
     if (!target) return;
     setIsAnalyzingCv(true);
     showToast(`⚡ Analisi fit e gap in corso con Gemini per ${target.co}...`);
@@ -3027,12 +3186,12 @@ export default function App() {
 
   // Target app for CV match tailoring
   const cvTargetApp = useMemo(() => {
-    return apps.find((a) => a.id === cvSelectedAppId) || apps[0];
+    return apps.find((a) => a.id === cvSelectedAppId) || apps[0] || EMPTY_APP;
   }, [apps, cvSelectedAppId]);
 
   // Target app for simulator
   const simTargetApp = useMemo(() => {
-    return apps.find((a) => a.id === simAppId) || apps[0];
+    return apps.find((a) => a.id === simAppId) || apps[0] || EMPTY_APP;
   }, [apps, simAppId]);
 
   // Active section key for sidebar
@@ -3208,6 +3367,8 @@ export default function App() {
 
           {/* Bottom Interview badges */}
           <div className="lbl">Colloqui</div>
+          {DEMO ? (
+            <>
           <button
             className="mini"
             style={{ background: 'linear-gradient(145deg, #a82c52, #6e1b4f)' }}
@@ -3244,6 +3405,20 @@ export default function App() {
           >
             BS<i style={{ background: '#ffbe5c' }}></i>
           </button>
+            </>
+          ) : (
+            rmInterviewApps.map((a) => (
+              <button
+                key={a.id}
+                className="mini"
+                style={{ background: grad(a.co) }}
+                onClick={() => setDrawerApp(a)}
+                aria-label={`${a.co}, colloquio`}
+              >
+                {ini(a.co)}<i></i>
+              </button>
+            ))
+          )}
         </nav>
 
         {/* ==============================================================
@@ -3557,8 +3732,10 @@ export default function App() {
           {/* Bottom Upcoming Interviews Card */}
           <div className="next" id="side-next">
             <div className="t">
-              Prossimi colloqui <span className="ex">esempio</span>
+              Prossimi colloqui {DEMO && <span className="ex">esempio</span>}
             </div>
+            {DEMO ? (
+              <>
             <button
               className="nx"
               onClick={() => {
@@ -3613,6 +3790,25 @@ export default function App() {
                 <span>Case Study Review · Growth</span>
               </div>
             </button>
+              </>
+            ) : rmInterviewApps.length === 0 ? (
+              <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Nessun colloquio in programma</span>
+            ) : (
+              rmInterviewApps.slice(0, 2).map((a) => (
+                <button key={a.id} className="nx" onClick={() => setDrawerApp(a)}>
+                  <span
+                    className="lg"
+                    style={{ width: '34px', height: '34px', borderRadius: '50%', fontSize: '11px', background: grad(a.co) }}
+                  >
+                    {ini(a.co)}
+                  </span>
+                  <div>
+                    <b>{a.co}</b>
+                    <span>{a.role}</span>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         </aside>
 
@@ -3778,12 +3974,16 @@ export default function App() {
               <article className="card hello">
                 <div className="top2">
                   <span className="avatar" style={{ width: '42px', height: '42px', minWidth: '42px', minHeight: '42px', flex: '0 0 42px' }}>
-                    AR
+                    {DEMO ? 'AR' : ini(userFullName)}
                   </span>
-                  <span className="pill">Business School</span>
+                  {DEMO && <span className="pill">Business School</span>}
                 </div>
                 <h3>Bentornato, {userFirstName}</h3>
-                <p>52 attive · 2 cose da fare oggi</p>
+                {DEMO ? (
+                  <p>52 attive · 2 cose da fare oggi</p>
+                ) : (
+                  <p>{rmActive} attive · {rmToApply} da inviare</p>
+                )}
               </article>
 
               <article className="card kpi">
@@ -3815,16 +4015,31 @@ export default function App() {
                 </div>
                 <div className="v">{apps.length}</div>
                 <div className="s">
-                  Inviate negli ultimi 7 giorni<span className="up">+36</span>
+                  {DEMO ? (
+                    <>
+                      Inviate negli ultimi 7 giorni<span className="up">+36</span>
+                    </>
+                  ) : (
+                    <>Totale nel tracker</>
+                  )}
                 </div>
               </article>
 
               <article className="card kpi">
                 <div className="k">Tasso colloqui</div>
-                <div className="v">0%</div>
-                <div className="s">
-                  0 su 34 inviate<span className="pill">Prime risposte attese</span>
-                </div>
+                {DEMO ? (
+                  <>
+                    <div className="v">0%</div>
+                    <div className="s">
+                      0 su 34 inviate<span className="pill">Prime risposte attese</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="v">{rmRate}%</div>
+                    <div className="s">{rmInterviews} su {rmSent} inviate</div>
+                  </>
+                )}
               </article>
 
               <article className="card kpi">
@@ -3837,12 +4052,24 @@ export default function App() {
                     </svg>
                   </span>
                 </div>
-                <div className="v">
-                  €1.330<span style={{ fontSize: '16px', color: 'var(--muted)' }}> /m</span>
-                </div>
-                <div className="s">
-                  Picco offerta: €1.600<span className="ex">esempio</span>
-                </div>
+                {DEMO ? (
+                  <>
+                    <div className="v">
+                      €1.330<span style={{ fontSize: '16px', color: 'var(--muted)' }}> /m</span>
+                    </div>
+                    <div className="s">
+                      Picco offerta: €1.600<span className="ex">esempio</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="v">
+                      {rmAvg ? eur(rmAvg) : '—'}
+                      <span style={{ fontSize: '16px', color: 'var(--muted)' }}> /m</span>
+                    </div>
+                    <div className="s">Picco offerta: {rmPeak ? eur(rmPeak) : '—'}</div>
+                  </>
+                )}
               </article>
             </div>
 
@@ -3879,6 +4106,8 @@ export default function App() {
                 </div>
 
                 <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {DEMO && (
+                    <>
                   {/* Daily suggested task 1: Piano di ricerca */}
                   <label className="tk">
                     <input
@@ -3947,6 +4176,8 @@ export default function App() {
                     </button>
                   </label>
 
+                    </>
+                  )}
                   {/* Live Google Tasks items */}
                   {googleTasksList.slice(0, 3).map((gt) => (
                     <label
@@ -3980,6 +4211,9 @@ export default function App() {
                       </span>
                     </label>
                   ))}
+                  {!DEMO && googleTasksList.length === 0 && (
+                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Nessuna attività per oggi</span>
+                  )}
                 </div>
 
                 {/* Quick Add row */}
@@ -4020,12 +4254,14 @@ export default function App() {
               <article className="card">
                 <div className="hd">
                   <h3>Prossimi passi</h3>
-                  <span className="ex">reali</span>
+                  {DEMO && <span className="ex">esempio</span>}
                   <button className="link" onClick={() => { setCalTab('sca'); handleGo('cal'); }}>
                     Tutti ›
                   </button>
                 </div>
                 <div id="pp" style={{ marginTop: '6px' }}>
+                  {DEMO ? (
+                    <>
                   <div className="sr2" style={{ gridTemplateColumns: '40px minmax(0,1fr) auto' }}>
                     <span className="lg" style={{ background: grad('Piano di ricerca') }} aria-hidden="true">PR</span>
                     <div>
@@ -4050,6 +4286,21 @@ export default function App() {
                     </div>
                     <span className="nxt info">Tra 5 giorni</span>
                   </div>
+                    </>
+                  ) : rmNextApps.length === 0 ? (
+                    <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Nessun passo in programma</span>
+                  ) : (
+                    rmNextApps.map((a) => (
+                      <div className="sr2" key={a.id} style={{ gridTemplateColumns: '40px minmax(0,1fr) auto' }}>
+                        <span className="lg" style={{ background: grad(a.co) }} aria-hidden="true">{ini(a.co)}</span>
+                        <div>
+                          <b>{a.co}</b>
+                          <span className="d">{a.role}</span>
+                        </div>
+                        <span className={`nxt ${a.nx?.[1] || 'info'}`}>{a.nx?.[0] || ''}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
               </article>
             </div>
@@ -4117,7 +4368,8 @@ export default function App() {
 
             {/* Bottom Two Cards: Analisi Fit & Distribuzione Città */}
             <div className="bottom" id="fit">
-              <article className="card">
+              {DEMO && (
+<article className="card">
                 <div className="hd">
                   <h3>Analisi fit competenze · Gemini AI</h3>
                   <span className="pill">CV Match 87%</span>
@@ -4154,6 +4406,7 @@ export default function App() {
                   </button>
                 </div>
               </article>
+)}
 
               <article className="card">
                 <div className="hd">
@@ -4677,7 +4930,7 @@ export default function App() {
                   <span>+</span>Aggiungi candidatura o incolla il link dell'annuncio con Gemini AI…
                 </button>
                 <span id="foot">
-                  Mostro {filteredApps.length} di {apps.length} · * valori d'esempio · sincronizzato, salvato alle 17:01
+                  Mostro {filteredApps.length} di {apps.length}{DEMO ? " · * valori d'esempio · sincronizzato, salvato alle 17:01" : ''}
                 </span>
               </div>
             </section>
@@ -4775,10 +5028,17 @@ export default function App() {
                 <article className="card">
                   <div className="hd" style={{ flexWrap: 'wrap', gap: '8px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <h3>Novembre 2026</h3>
+                      <h3>{DEMO ? 'Novembre 2026' : rmCal.label}</h3>
                       <span style={{ fontSize: '11px', color: 'var(--muted)' }}>· {activeWorkspaceAccount}</span>
                     </div>
                     <span className="sp"></span>
+                    {!DEMO && (
+                      <div style={{ display: 'flex', gap: '4px' }}>
+                        <button className="btn sm" onClick={() => setCalMonthOffset((o) => o - 1)} aria-label="Mese precedente">‹</button>
+                        <button className="btn sm" onClick={() => setCalMonthOffset(0)}>Oggi</button>
+                        <button className="btn sm" onClick={() => setCalMonthOffset((o) => o + 1)} aria-label="Mese successivo">›</button>
+                      </div>
+                    )}
                     <div className="seg">
                       <button aria-pressed={calMode === 'month'} onClick={() => setCalMode('month')}>
                         Mese
@@ -4803,6 +5063,8 @@ export default function App() {
                     {['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'].map((d) => (
                       <div className="h" key={d}>{d}</div>
                     ))}
+                    {DEMO ? (
+                      <>
                     {[26, 27, 28, 29, 30, 31].map((i) => (
                       <div className="d" style={{ opacity: 0.7 }} key={`oct-${i}`}>{i}</div>
                     ))}
@@ -4858,6 +5120,34 @@ export default function App() {
                     {[1, 2, 3, 4, 5, 6].map((i) => (
                       <div className="d" style={{ opacity: 0.7 }} key={`dec-${i}`}>{i}</div>
                     ))}
+                      </>
+                    ) : (
+                      <>
+                    {Array.from({ length: rmCal.lead }, (_, i) => (
+                      <div className="d" key={`lead-${i}`} style={{ opacity: 0.3 }}></div>
+                    ))}
+                    {Array.from({ length: rmCal.daysInMonth }, (_, idx) => idx + 1).map((d) => {
+                      const key = `${rmCal.y}-${String(rmCal.m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                      return (
+                        <div className={`d ${key === rmCal.todayKey ? 'today' : ''}`} key={key}>
+                          <span>{d}</span>
+                          {googleCalendarEvents
+                            .filter((ev) => (ev.start?.dateTime || ev.start?.date || '').startsWith(key))
+                            .map((ev) => (
+                              <span
+                                key={ev.id}
+                                className="ev"
+                                style={{ background: 'rgba(139, 92, 246, 0.25)', color: 'var(--text)', borderLeft: '3px solid #8b5cf6' }}
+                                title={ev.summary}
+                              >
+                                📅 {ev.summary}
+                              </span>
+                            ))}
+                        </div>
+                      );
+                    })}
+                      </>
+                    )}
                   </div>
                 </article>
 
@@ -4883,6 +5173,8 @@ export default function App() {
                   </div>
 
                   {/* Section 1: Recommended Daily Tasks with Send-to-Phone Button */}
+                  {DEMO && (
+                    <>
                   <div style={{ marginTop: '14px' }}>
                     <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--muted)', marginBottom: '8px' }}>
                       Attività del giorno raccomandate:
@@ -4959,6 +5251,8 @@ export default function App() {
                     </ul>
                   </div>
 
+                    </>
+                  )}
                   {/* Section 2: Live Google Tasks List */}
                   <div style={{ marginTop: '18px', paddingTop: '14px', borderTop: '1px solid var(--rim)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -5447,6 +5741,8 @@ export default function App() {
               VIEW 5: SITI CARRIERE (v-siti) CON LOGHI UNIFORMI
               ============================================================== */}
           <section className={`view ${view === 'siti' ? 'on' : ''}`} id="v-siti" aria-label="Siti carriere">
+            {DEMO ? (
+              <>
             <article className="card">
               <div className="hd" style={{ flexWrap: 'wrap', gap: '10px' }}>
                 <div>
@@ -5536,6 +5832,19 @@ export default function App() {
                 ))}
               </div>
             </article>
+              </>
+            ) : (
+              <>
+            <article className="card">
+              <div className="hd">
+                <h3 style={{ margin: 0 }}>Siti carriere da monitorare</h3>
+              </div>
+              <p style={{ margin: '8px 0 0', fontSize: '13px', color: 'var(--muted)' }}>
+                Nessun sito in elenco. Aggiungi qui le aziende e i portali carriere che vuoi controllare con regolarità.
+              </p>
+            </article>
+              </>
+            )}
           </section>
 
           {/* ==============================================================
@@ -5693,7 +6002,7 @@ export default function App() {
                       <span style={{ fontSize: '20px' }}>🤖</span>
                       <div>
                         <b style={{ fontSize: '13px', color: 'var(--text)' }}>
-                          Automazione Gemini attiva · 3 Aziende &amp; 3 Persone estratte per mercoledì 28 ottobre
+                          {DEMO ? 'Automazione Gemini attiva · 3 Aziende & 3 Persone estratte per mercoledì 28 ottobre' : `Automazione Gemini attiva · 3 aziende e 3 persone per ${rmToday}`}
                         </b>
                         <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--muted)' }}>
                           Dati selezionati dal database scaleup raccolto domenica. Ciascuna persona include un template di connessione LinkedIn sartoriale.
@@ -5929,7 +6238,7 @@ export default function App() {
                     }}
                   >
                     <div>
-                      <b style={{ fontSize: '13px' }}>Database Scaleup Raccolte · Ultima scansione: Domenica 25 ott</b>
+                      <b style={{ fontSize: '13px' }}>{DEMO ? 'Database Scaleup Raccolte · Ultima scansione: Domenica 25 ott' : 'Database Scaleup Raccolte'}</b>
                       <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--muted)' }}>
                         {scaleups.length} scaleup tecnologiche profilate divise per settore, città e ruoli aperti
                       </p>
@@ -8137,11 +8446,11 @@ export default function App() {
                 </div>
                 <div className="who" style={{ margin: '14px 0' }}>
                   <span className="avatar" style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px', flex: '0 0 48px' }}>
-                    AR
+                    {DEMO ? 'AR' : ini(userFullName)}
                   </span>
                   <div>
                     <b style={{ fontSize: '15px' }}>{userFullName}</b>
-                    <span>Management Engineer · MSc Innovation &amp; Entrepreneurship (MSc)</span>
+                    <span>{DEMO ? 'Management Engineer · MSc Innovation & Entrepreneurship (MSc)' : searchConfig.userProfile.education || '—'}</span>
                   </div>
                 </div>
 
@@ -8305,7 +8614,7 @@ export default function App() {
                     value={simAppId}
                     onChange={(e) => {
                       setSimAppId(e.target.value);
-                      const selected = apps.find((a) => a.id === e.target.value) || apps[0];
+                      const selected = apps.find((a) => a.id === e.target.value) || apps[0] || EMPTY_APP;
                       setChatMessages([
                         {
                           sender: 'ai',
@@ -9461,7 +9770,7 @@ export default function App() {
                     </div>
                     <div className="who" style={{ margin: '14px 0' }}>
                       <span className="avatar" style={{ width: '52px', height: '52px', minWidth: '52px', minHeight: '52px', flex: '0 0 52px' }}>
-                        AR
+                        {DEMO ? 'AR' : ini(userFullName)}
                       </span>
                       <div>
                         <b style={{ fontSize: '16px' }}>{userFullName}</b>

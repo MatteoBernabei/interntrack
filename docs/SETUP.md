@@ -33,6 +33,12 @@ A second Vercel project from the same repository, with variables. Your data stay
 4. **Gemini**: create a key at [aistudio.google.com](https://aistudio.google.com) and set `GEMINI_API_KEY`, `ALLOWED_EMAILS`, `CANDIDATE_NAME` and `CANDIDATE_PROFILE`.
 5. **Deploy** with the variables below. After changing a variable, redeploy.
 
+## Data in a private instance
+
+A private instance (Firebase configured) **starts empty**: no sample applications, contacts or events. Add applications with **New application**, or import them from **Upload Excel / CSV** or from a JSON backup (Settings). While you are signed in, every change is saved automatically to your Firestore database (`users/{your id}/applications`), so the data is still there the next time you sign in, from any browser. Settings, the networking queue and company logos are kept in the browser (logos also in Firestore); export a JSON backup now and then.
+
+The public demo (no Firebase variables) always shows sample data.
+
 ## Environment variables
 
 | Variable | Purpose |
@@ -92,6 +98,12 @@ Un secondo progetto Vercel dallo stesso repository, con le variabili. I tuoi dat
 3. **Domini autorizzati**: aggiungi il dominio Vercel in *Authentication → Settings → Authorized domains*.
 4. **Gemini**: crea una chiave su [aistudio.google.com](https://aistudio.google.com) e imposta `GEMINI_API_KEY`, `ALLOWED_EMAILS`, `CANDIDATE_NAME` e `CANDIDATE_PROFILE`.
 5. **Deploy** con le variabili qui sotto. Dopo aver cambiato una variabile, rifai il deploy.
+
+## Dati in un'istanza privata
+
+Un'istanza privata (con Firebase configurato) **parte vuota**: nessuna candidatura, contatto o evento di esempio. Aggiungi le candidature con **Nuova candidatura**, oppure importale con **Carica Excel / CSV** o da un backup JSON (Impostazioni). Finché sei collegato, ogni modifica viene salvata in automatico nel tuo database Firestore (`users/{il tuo id}/applications`), quindi i dati ci sono ancora al prossimo accesso, da qualsiasi browser. Impostazioni, coda del networking e loghi restano nel browser (i loghi anche su Firestore): ogni tanto esporta un backup JSON.
+
+La demo pubblica (senza variabili Firebase) mostra sempre dati di esempio.
 
 ## Variabili d'ambiente
 
