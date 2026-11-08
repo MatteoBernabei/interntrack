@@ -5,7 +5,7 @@
 
 **A personal CRM for the job search** · *Un CRM personale per la ricerca di lavoro*
 
-[**▶ Live demo (English)**](https://YOUR-DEMO.vercel.app/?lang=en) · [**▶ Demo online (Italiano)**](https://YOUR-DEMO.vercel.app/?lang=it)
+[**▶ Live demo (English)**](https://interntrack-demo.vercel.app/?lang=en) · [**▶ Demo online (Italiano)**](https://interntrack-demo.vercel.app/?lang=it)
 
 [![React](https://img.shields.io/badge/React-19-61dafb.svg?logo=react&logoColor=white)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -41,14 +41,13 @@ I built InternTrack as a CRM for my own search. Each application is an opportuni
 - **Uses AI where it saves time.** Job-posting extraction, tailored cover letters, interview practice and CV-to-role fit with Gemini.
 - **Works in English and Italian**, switchable live.
 
-**[▶ Try the demo](https://YOUR-DEMO.vercel.app/?lang=en)** (no sign-up). The AI features are switched off in the public demo to protect the API quota; they run on a private instance, see [`docs/SETUP.md`](docs/SETUP.md).
+**[▶ Try the demo](https://interntrack-demo.vercel.app/?lang=en)** (no sign-up). The AI features are switched off in the public demo to protect the API quota; they run on a private instance, see [`docs/SETUP.md`](docs/SETUP.md).
 
 ## Screenshots
 
 | | |
 |---|---|
-| ![Tracker](docs/screenshots/en/02-tracker.png)<br>**Tracker.** The pipeline at a glance, and the "action center" that says what needs sending or following up. | ![Calendar](docs/screenshots/en/03-calendar.png)<br>**Calendar.** Interviews and deadlines in one view, synced with Google Calendar and Tasks. |
-| ![Networking hub](docs/screenshots/en/04-networking-hub.png)<br>**Networking hub.** Today's suggested contacts with a ready-to-paste connection note. | ![Cover letter](docs/screenshots/en/05-cover-letter.png)<br>**Cover letter and interview practice.** Tailored to the role, with Gemini. |
+| ![Tracker](docs/screenshots/en/02-tracker.png)<br>**Tracker.** The pipeline at a glance, filtered by stage, with the next step for each application. | ![Search plan](docs/screenshots/en/03-search-plan.png)<br>**Search plan.** Daily research sessions with ready-made boolean queries for LinkedIn, Indeed and Joinrs. |
 
 ## How it works
 
@@ -93,11 +92,11 @@ To be defined by the author.
 
 # Italiano
 
-![Dashboard](docs/screenshots/it/01-dashboard.png)
+![Dashboard](docs/screenshots/en/01-dashboard.png)
 
 **Ogni candidatura, contatto e follow-up in un'unica pipeline, trasformata in una breve lista di cose da fare oggi.**
 
-> La demo usa **dati di esempio**: nessuna persona, azienda o email è reale. Cambia lingua in qualsiasi momento con il pulsante **EN | IT** nella barra in alto.
+> La demo usa **dati di esempio**: nessuna persona, azienda o email è reale. Cambia lingua in qualsiasi momento con il pulsante **EN | IT** nella barra in alto. Gli screenshot sono in lingua inglese.
 
 ## Perché l'ho costruita
 
@@ -113,14 +112,13 @@ Ho costruito InternTrack come un CRM per la mia ricerca. Ogni candidatura è un'
 - **Usa l'AI dove fa risparmiare tempo.** Estrazione dagli annunci, cover letter su misura, simulazione di colloquio e compatibilità CV/ruolo con Gemini.
 - **Funziona in inglese e in italiano**, con cambio al volo.
 
-**[▶ Prova la demo](https://YOUR-DEMO.vercel.app/?lang=it)** (senza registrazione). Le funzioni AI sono spente nella demo pubblica per proteggere la quota delle API; girano su un'istanza privata, vedi [`docs/SETUP.md`](docs/SETUP.md).
+**[▶ Prova la demo](https://interntrack-demo.vercel.app/?lang=it)** (senza registrazione). Le funzioni AI sono spente nella demo pubblica per proteggere la quota delle API; girano su un'istanza privata, vedi [`docs/SETUP.md`](docs/SETUP.md).
 
 ## Screenshot
 
 | | |
 |---|---|
-| ![Tracker](docs/screenshots/it/02-tracker.png)<br>**Tracker.** La pipeline a colpo d'occhio e il "centro azioni" che dice cosa inviare o ricontattare. | ![Calendario](docs/screenshots/it/03-calendar.png)<br>**Calendario.** Colloqui e scadenze in un'unica vista, sincronizzati con Google Calendar e Tasks. |
-| ![Hub networking](docs/screenshots/it/04-networking-hub.png)<br>**Hub networking.** I contatti suggeriti di oggi con una nota di connessione pronta da incollare. | ![Cover letter](docs/screenshots/it/05-cover-letter.png)<br>**Cover letter e simulazione colloquio.** Su misura per il ruolo, con Gemini. |
+| ![Tracker](docs/screenshots/en/02-tracker.png)<br>**Tracker.** La pipeline a colpo d'occhio, filtrata per fase, con il prossimo passo di ogni candidatura. | ![Piano di ricerca](docs/screenshots/en/03-search-plan.png)<br>**Piano di ricerca.** Sessioni di ricerca quotidiane con query booleane già pronte per LinkedIn, Indeed e Joinrs. |
 
 ## Come funziona
 
