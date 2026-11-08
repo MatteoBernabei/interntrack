@@ -16,10 +16,10 @@ const port = parseInt(process.env.PORT || '3000', 10);
 app.use(express.json({ limit: '10mb' }));
 
 // ─────────────────────────────────────────────────────────────
-// Protezione delle rotte AI
-// Le funzioni AI usano la TUA chiave Gemini: restano chiuse finché non imposti
-// ALLOWED_EMAILS (elenco di email separate da virgola) e l'utente non è loggato con una di quelle.
-// Nel sito demo (senza queste variabili) rispondono 503 e l'app usa i dati di esempio.
+// Access control for the AI routes
+// The AI features use YOUR Gemini key, so they stay closed until you set ALLOWED_EMAILS
+// (comma-separated list) and the caller is signed in with one of those accounts.
+// On the public demo (no such variables) they answer 503 and the app keeps using sample data.
 // ─────────────────────────────────────────────────────────────
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '')
   .split(',')
@@ -43,28 +43,28 @@ async function verifyFirebaseIdToken(idToken: string): Promise<string | null> {
 
 app.use('/api/ai', async (req, res, next) => {
   if (!process.env.GEMINI_API_KEY) {
-    return res.status(503).json({ error: 'Funzioni AI non configurate (modalità demo).' });
+    return res.status(503).json({ error: 'AI features are not configured (demo mode).' });
   }
   if (ALLOWED_EMAILS.length === 0) {
-    return res.status(503).json({ error: 'Funzioni AI disattivate: imposta ALLOWED_EMAILS sul server.' });
+    return res.status(503).json({ error: 'AI features are disabled: set ALLOWED_EMAILS on the server.' });
   }
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!token) return res.status(401).json({ error: 'Accesso richiesto.' });
+  if (!token) return res.status(401).json({ error: 'Sign-in required.' });
   try {
     const email = await verifyFirebaseIdToken(token);
     if (!email || !ALLOWED_EMAILS.includes(email)) {
-      return res.status(403).json({ error: 'Account non autorizzato.' });
+      return res.status(403).json({ error: 'Account not authorized.' });
     }
     return next();
   } catch {
-    return res.status(401).json({ error: 'Token non valido.' });
+    return res.status(401).json({ error: 'Invalid token.' });
   }
 });
 
 // Server-side Gemini initialization
 const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || 'MISSING_KEY', // senza chiave le rotte AI restano bloccate dal middleware qui sotto
+  apiKey: process.env.GEMINI_API_KEY || 'MISSING_KEY', // without a key the AI routes stay blocked by the middleware below
   httpOptions: {
     headers: {
       'User-Agent': 'interntrack',
@@ -92,13 +92,13 @@ async function callGemini(params: any): Promise<any> {
   throw lastErr;
 }
 
-// Profilo del candidato usato nei prompt AI.
-// Si configura con le variabili d'ambiente CANDIDATE_NAME e CANDIDATE_PROFILE (testo libero, "\\n" = a capo).
-// Il profilo personale NON sta nel codice: resta nelle variabili del tuo deploy.
+// Candidate profile used in the AI prompts.
+// Configure it with the CANDIDATE_NAME and CANDIDATE_PROFILE environment variables (free text, "\\n" = new line).
+// Personal details are NOT in the code: they live in your deployment's variables.
 const CANDIDATE_NAME = process.env.CANDIDATE_NAME || 'il candidato';
 const CANDIDATE_CONTEXT = (process.env.CANDIDATE_PROFILE ||
 `Candidato: ${CANDIDATE_NAME}
-Formazione, esperienze e competenze: non configurate (imposta CANDIDATE_PROFILE).
+Education, experience and skills: not configured (set CANDIDATE_PROFILE).
 Ruoli cercati: Founder Associate, Growth Manager, Business Developer, Venture Builder.
 Regole di comunicazione: tono diretto e professionale, frasi brevi e concrete, niente enfasi o esclamazioni, nessun cliché, massima credibilità.`
 ).replace(/\\n/g, '\n');

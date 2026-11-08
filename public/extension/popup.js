@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusBox = document.getElementById('status-box');
 
   // URL base di Intern Track (sostituibile con il proprio link)
-  const appBaseUrl = 'https://YOUR-APP.vercel.app' /* sostituisci con l'indirizzo del tuo deploy */;
+  const appBaseUrl = 'https://YOUR-APP.vercel.app' /* replace with the URL of your deployment */;
 
   btn.addEventListener('click', async () => {
     btn.disabled = true;

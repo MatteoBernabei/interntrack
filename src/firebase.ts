@@ -2,8 +2,8 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged as firebaseOnAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 
-// Configurazione letta dalle variabili d'ambiente (vedi .env.example).
-// Se mancano, l'app parte in MODALITÀ DEMO: dati fittizi, nessun login, nessun database.
+// Configuration is read from environment variables (see .env.example).
+// If they are missing, the app starts in DEMO MODE: sample data, no login, no database.
 const env = ((import.meta as any).env || {}) as Record<string, string | undefined>;
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY,
@@ -15,7 +15,8 @@ const firebaseConfig = {
 };
 
 export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId);
-// Gmail richiede una verifica Google molto onerosa: si attiva solo nella propria istanza privata.
+// Gmail needs Google's restricted-scope verification (annual security assessment):
+// enable it only on your own private instance.
 export const isGmailEnabled = env.VITE_ENABLE_GMAIL === 'true';
 
 const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
@@ -64,7 +65,7 @@ export async function testConnection() {
 export async function loginWithGoogle(hintEmail?: string): Promise<{ user: User; accessToken: string }> {
   try {
     if (!isFirebaseConfigured) {
-      throw new Error('Modalità demo: l\'accesso con Google non è configurato su questo sito.');
+      throw new Error('Demo mode: Google sign-in is not configured on this site.');
     }
     isSigningIn = true;
     const provider = new GoogleAuthProvider();

@@ -490,7 +490,7 @@ export const INITIAL_DAILY_PEOPLE: MockDailyPerson[] = [
     company: 'Factorial',
     city: 'Barcellona',
     linkedinUrl: 'https://www.linkedin.com/search/results/people/?keywords=Elena+Rossi+Factorial+HR',
-    connectionNote: 'Ciao Elena, seguo con molto entusiasmo la traiettoria di Factorial a Barcellona. Concludo a breve il MSc in Innovation & Entrepreneurship al Politecnico di Milano con focus su data analytics e go-to-market. Mi farebbe molto piacere connettermi con te!',
+    connectionNote: 'Ciao Elena, seguo con molto entusiasmo la traiettoria di Factorial a Barcellona. Concludo a breve il MSc in Innovation & Entrepreneurship presso una business school europea con focus su data analytics e go-to-market. Mi farebbe molto piacere connettermi con te!',
     isContacted: false,
     avatarSeed: 'ER',
   },

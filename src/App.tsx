@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import { appLang, tr, translateTo } from './i18n';
+import { LanguageSwitch, useAppLang } from './i18n/LanguageSwitch';
 import { db, auth, loginWithGoogle, logoutUser, onAuthStateChanged, testConnection, User, getAccessToken, getConnectedAccounts } from './firebase';
 import { collection, doc, setDoc, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { LOGO_W, LOGO_B } from './data/mockupLogos';
@@ -84,6 +86,9 @@ import {
 
 // Email di riferimento per i link mailto quando non si è loggati (configurabile con VITE_OWNER_EMAIL)
 const OWNER_EMAIL_FALLBACK = ((import.meta as any).env?.VITE_OWNER_EMAIL as string) || 'demo@example.com';
+
+// Sample cover letter shown before the user edits it (Italian source; translated by the i18n dictionary).
+const DEFAULT_LETTER_IT = `Gentile Team Talent di Logistica OS,\n\nDesidero sottoporre la mia candidatura per la posizione di Founders Associate Intern. Il mio percorso in Management Engineering con Master in Innovation & Entrepreneurship presso una business school europea, unito alla passione per le operazioni ad alto impatto tecnologico, è perfettamente allineato alla vostra missione.\n\nDurante gli studi ho guidato il progetto di go-to-market per un prodotto tecnologico innovativo e ottenuto un riconoscimento in una competizione di business. Ho solide competenze nell'analisi dati tramite Python ed Excel avanzato e un approccio orientato alla risoluzione rapida di problemi operativi.\n\nSarei entusiasta di contribuire alla crescita e all'efficienza operativa di Logistica OS.\n\nCordiali saluti,\nAlex Rossi`;
 
 export default function App() {
   // Theme state ('dark' or 'light')
@@ -515,18 +520,23 @@ export default function App() {
 
   // AI Tools: Cover Letter state
   const [clAppId, setClAppId] = useState<string>('lo');
-  const [clLang, setClLang] = useState<'it' | 'en'>('it');
+  const [clLang, setClLang] = useState<'it' | 'en'>(appLang === 'en' ? 'en' : 'it');
   const [clTone, setClTone] = useState<'startup' | 'corporate' | 'academic'>('startup');
-  const [clDraft, setClDraft] = useState<string>(
-    `Gentile Team Talent di Logistica OS,\n\nDesidero sottoporre la mia candidatura per la posizione di Founders Associate Intern. Il mio percorso in Management Engineering con Master in Innovation & Entrepreneurship presso una business school europea, unito alla passione per le operazioni ad alto impatto tecnologico, è perfettamente allineato alla vostra missione.\n\nDurante gli studi ho guidato il progetto di go-to-market per una prodotto tecnologico innovativo e ottenuto il un riconoscimento in una competizione di business. Ho solide competenze nell'analisi dati tramite Python ed Excel avanzato e un approccio orientato alla risoluzione rapida di problemi operativi.\n\nSarei entusiasta di contribuire alla crescita e all'efficienza operativa di Logistica OS.\n\nCordiali saluti,\nAlex Rossi`
-  );
+  const [clDraft, setClDraft] = useState<string>(() => tr(DEFAULT_LETTER_IT));
+  const uiLang = useAppLang();
+  // keep the untouched sample letter in the language currently selected
+  useEffect(() => {
+    setClDraft((prev) =>
+      prev === DEFAULT_LETTER_IT || prev === translateTo(DEFAULT_LETTER_IT, 'en') ? translateTo(DEFAULT_LETTER_IT, uiLang) : prev
+    );
+  }, [uiLang]);
 
   // AI Tools: Interview Simulator state
   const [simAppId, setSimAppId] = useState<string>('lo');
   const [chatMessages, setChatMessages] = useState<Array<{ sender: 'me' | 'ai'; text: string }>>([
     {
       sender: 'ai',
-      text: 'Ciao Alex! Sono il tuo simulatore sartoriale di colloqui. Ho analizzato il tuo CV (MSc) e i requisiti per "Founders Associate Intern" presso Logistica OS. Iniziamo con una domanda chiave: "Vedo che hai curato il go-to-market di una prodotto tecnologico innovativo. Come applicheresti la stessa metodologia per scalare la nostra supply chain?"',
+      text: 'Ciao Alex! Sono il tuo simulatore sartoriale di colloqui. Ho analizzato il tuo CV (MSc) e i requisiti per "Founders Associate Intern" presso Logistica OS. Iniziamo con una domanda chiave: "Vedo che hai curato il go-to-market di un prodotto tecnologico innovativo. Come applicheresti la stessa metodologia per scalare la nostra supply chain?"',
     },
   ]);
   const [inputChatText, setInputChatText] = useState<string>('');
@@ -3644,6 +3654,7 @@ export default function App() {
 
             {/* Top Right Actions */}
             <div className="acts">
+              <LanguageSwitch />
               {/* Account Google & Multi-Inbox Hub */}
               <button
                 className="btn sm"
@@ -9330,7 +9341,7 @@ export default function App() {
                           </label>
                           <input
                             type="email"
-                            placeholder="es. matteo.bernabei@gmail.com"
+                            placeholder="es. nome.cognome@gmail.com"
                             value={newGmailEmail}
                             onChange={(e) => setNewGmailEmail(e.target.value)}
                             style={{ width: '100%', height: '34px', borderRadius: '8px', padding: '0 10px', fontSize: '12px' }}

@@ -1,7 +1,7 @@
 import { auth, isFirebaseConfigured } from './firebase';
 
-// Aggiunge il token di accesso Firebase alle chiamate verso /api/*, così il server
-// può verificare chi sta usando le funzioni AI (vedi server.ts → ALLOWED_EMAILS).
+// Adds the Firebase ID token to calls to /api/* so the server can verify who is using the
+// AI features (see server.ts → ALLOWED_EMAILS).
 export function installAuthFetch() {
   if (!isFirebaseConfigured || typeof window === 'undefined') return;
   const originalFetch = window.fetch.bind(window);
@@ -15,7 +15,7 @@ export function installAuthFetch() {
         return originalFetch(input, { ...init, headers });
       }
     } catch {
-      // se il token non è disponibile, la chiamata prosegue senza intestazione
+      // if the token is not available, the call goes on without the header
     }
     return originalFetch(input, init);
   };
