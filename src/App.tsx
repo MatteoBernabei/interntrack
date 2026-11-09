@@ -237,7 +237,7 @@ export default function App() {
   const [taskDone, setTaskDone] = useState<{ [key: string]: boolean }>({});
 
   // Dynamic Workspace Accounts: uses dynamically connected accounts from OAuth or authenticated user
-  const WORKSPACE_ACCOUNTS = useMemo(() => {
+  const WORKSPACE_ACCOUNTS = (() => {
     if (!currentUser?.email) {
       return sample(['demo@example.com'], [] as string[]);
     }
@@ -246,7 +246,7 @@ export default function App() {
       return Array.from(new Set([currentUser.email, ...accounts]));
     }
     return [currentUser.email];
-  }, [currentUser]);
+  })();
 
   const [activeWorkspaceAccount, setActiveWorkspaceAccount] = useState<string>(sample('demo@example.com', ''));
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState<GoogleCalendarEvent[]>(!DEMO ? [] : [
@@ -1220,10 +1220,11 @@ export default function App() {
 
   // 3. Invio Automatico Email Quotidiana (Daily Dispatch di 3 contatti via Gmail API)
   const handleSendDailyEmailNow = async () => {
-    const userEmail = currentUser?.email || OWNER_EMAIL_FALLBACK;
+    // Single sender: the mailbox marked as "receiver" (first of VITE_GMAIL_ACCOUNTS); otherwise the signed-in account
+    const userEmail = gmailAccounts.find((g) => g.isReceiver && g.status === 'Attivo')?.email || currentUser?.email || OWNER_EMAIL_FALLBACK;
     const token = getAccessToken(userEmail);
     if (!token) {
-      showToast('⚠️ Accedi con Google per inviare l’email automatica tramite Gmail API');
+      showToast(`⚠️ Collega ${userEmail} con Google per inviare l’email automatica tramite Gmail API`);
       return;
     }
 
@@ -2416,31 +2417,87 @@ export default function App() {
     showToast(`Stato di ${targetCo} impostato su "${ST[newSt]}"`);
   };
 
-  // Gmail automatic mail scanning & recruiter detection modal opener
+  // Accounts whose mail, calendar and tasks are read together (signed-in user + active mailboxes from the settings)
+  const accountsToSync = (): string[] => {
+    const set = new Set<string>();
+    if (currentUser?.email) set.add(currentUser.email.toLowerCase());
+    gmailAccounts.filter((g) => g.status === 'Attivo').forEach((g) => set.add(g.email.toLowerCase()));
+    return Array.from(set);
+  };
+
+  // Returns the access tokens of the accounts that are already connected and connects at most ONE missing
+  // account per click (browsers allow a single popup per user gesture). The others are reported in `missing`.
+  const collectTokens = async (accounts: string[]) => {
+    const ready: Array<{ email: string; token: string }> = [];
+    const missing: string[] = [];
+    let popupUsed = false;
+    for (const email of accounts) {
+      let token = getAccessToken(email);
+      if (!token && currentUser?.email?.toLowerCase() === email) token = getAccessToken();
+      if (!token && !popupUsed) {
+        popupUsed = true;
+        try {
+          const res = await loginWithGoogle(email);
+          token = res.accessToken;
+        } catch (e) {
+          // popup closed or blocked: the account stays in `missing`
+        }
+      }
+      if (token) ready.push({ email, token });
+      else missing.push(email);
+    }
+    return { ready, missing };
+  };
+
+  // Gmail automatic mail scanning & recruiter detection modal opener (reads ALL the active mailboxes)
   const handleCheckMail = async () => {
     setIsGmailModalOpen(true);
     setGmailScanning(true);
     try {
-      const token = getAccessToken();
-      const tracked = apps.map((a) => ({ id: a.id, name: a.co }));
-      if (token) {
-        const live = await fetchRecruiterEmailsFromGmail(token, tracked);
-        if (live.length > 0) {
-          setRecruiterMessages(live);
-          showToast(`Trovate ${live.length} comunicazioni recruiter da Gmail`);
-        } else {
-          setRecruiterMessages(sample(MOCK_RECRUITER_MESSAGES, []));
-          showToast('Nessuna nuova email non letta: mostro comunicazioni recenti');
-        }
-      } else {
+      if (DEMO) {
         setTimeout(() => {
-          setRecruiterMessages(sample(MOCK_RECRUITER_MESSAGES, []));
+          setRecruiterMessages(MOCK_RECRUITER_MESSAGES);
           showToast('Scansione completata (modalità portfolio)');
         }, 400);
+        return;
       }
+      const accounts = accountsToSync();
+      if (accounts.length === 0) {
+        showToast('Accedi con Google per leggere la posta');
+        return;
+      }
+      const tracked = apps.map((a) => ({ id: a.id, name: a.co }));
+      const { ready, missing } = await collectTokens(accounts);
+      if (ready.length === 0) {
+        showToast(`Accesso non completato: ${missing.join(', ')}`);
+        return;
+      }
+      const lists = await Promise.all(
+        ready.map(async ({ email, token }) => {
+          try {
+            const msgs = await fetchRecruiterEmailsFromGmail(token, tracked);
+            return msgs.map((m) => ({ ...m, mailbox: email }));
+          } catch (err) {
+            console.warn('Gmail fetch error for', email, err);
+            return [] as RecruiterEmailMessage[];
+          }
+        })
+      );
+      const seen = new Set<string>();
+      const merged = lists
+        .flat()
+        .filter((m) => (seen.has(`${m.mailbox}:${m.id}`) ? false : (seen.add(`${m.mailbox}:${m.id}`), true)))
+        .sort((x, y) => y.timestamp - x.timestamp);
+      setRecruiterMessages(merged);
+      const missingNote = missing.length ? ` Per leggere anche ${missing.join(', ')} premi di nuovo "Controlla ora" e autorizza l'accesso.` : '';
+      showToast(
+        merged.length > 0
+          ? `Trovate ${merged.length} comunicazioni recruiter da ${ready.length} ${ready.length === 1 ? 'casella' : 'caselle'}.${missingNote}`
+          : `Nessuna nuova comunicazione recruiter.${missingNote}`
+      );
     } catch (e) {
-      setRecruiterMessages(sample(MOCK_RECRUITER_MESSAGES, []));
-      showToast('Scansione con dati dimostrativi di portfolio completata');
+      console.warn('Mail scan error:', e);
+      showToast('Errore nella lettura della posta: riprova tra poco');
     } finally {
       setGmailScanning(false);
     }
@@ -2462,55 +2519,53 @@ export default function App() {
     }
   };
 
-  // Sincronizzazione Google Calendar & Google Tasks per l'account specificato o attivo
-  const handleSyncCalendarAndTasks = async (targetAccount = activeWorkspaceAccount) => {
+  // Sincronizzazione Google Calendar & Google Tasks: di default TUTTI gli account, uniti in un'unica vista
+  const handleSyncCalendarAndTasks = async (targetAccount?: string) => {
     setIsWorkspaceSyncing(true);
-    showToast(`🔄 Sincronizzazione Google Calendar & Tasks con ${targetAccount}...`);
+    const accounts = targetAccount ? [targetAccount.toLowerCase()] : accountsToSync();
+    showToast(`🔄 Sincronizzazione Google Calendar & Tasks (${accounts.join(', ') || 'nessun account'})...`);
     try {
-      let token = getAccessToken(targetAccount) || getAccessToken();
-      if (!token && (!currentUser || currentUser.email?.toLowerCase() !== targetAccount.toLowerCase())) {
-        try {
-          const res = await loginWithGoogle(targetAccount);
-          token = res.accessToken;
-        } catch (e) {
-          showToast(`Accesso a ${targetAccount} non completato.`);
-          return;
-        }
-      } else if (!token) {
-        try {
-          const res = await loginWithGoogle(targetAccount);
-          token = res.accessToken;
-        } catch (e) {
-          showToast(`Accesso a ${targetAccount} non completato.`);
-          return;
-        }
+      const { ready, missing } = await collectTokens(accounts);
+      if (ready.length === 0) {
+        showToast(`Accesso a ${missing.join(', ') || 'Google'} non completato.`);
+        return;
       }
-
-      if (token) {
+      let totalEvents = 0;
+      let totalTasks = 0;
+      for (const { email, token } of ready) {
         const [calEvents, tasks] = await Promise.all([
           fetchCalendarEvents(token).catch((err) => {
             console.warn('Calendar fetch error:', err);
-            return [];
+            return null;
           }),
           fetchGoogleTasks(token).catch((err) => {
             console.warn('Google Tasks fetch error:', err);
-            return [];
+            return null;
           }),
         ]);
-
-        if (calEvents.length > 0) {
-          setGoogleCalendarEvents(calEvents.map((e) => ({ ...e, accountEmail: targetAccount })));
+        // replace only the items of THIS account, keep the other accounts' items
+        if (calEvents) {
+          setGoogleCalendarEvents((prev) => [
+            ...prev.filter((e) => (e.accountEmail || '').toLowerCase() !== email),
+            ...calEvents.map((e) => ({ ...e, accountEmail: email })),
+          ]);
+          totalEvents += calEvents.length;
         }
-        if (tasks.length > 0) {
-          setGoogleTasksList(tasks.map((t) => ({ ...t, accountEmail: targetAccount })));
+        if (tasks) {
+          setGoogleTasksList((prev) => [
+            ...prev.filter((t) => (t.accountEmail || '').toLowerCase() !== email),
+            ...tasks.map((t) => ({ ...t, accountEmail: email })),
+          ]);
+          totalTasks += tasks.length;
         }
-        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setLastWorkspaceSyncTime(`Oggi alle ${nowStr}`);
-        showToast(`✓ Sincronizzati ${calEvents.length} eventi Calendar e ${tasks.length} task Google per ${targetAccount}!`);
       }
+      const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastWorkspaceSyncTime(`Oggi alle ${nowStr}`);
+      const missingNote = missing.length ? ` Per sincronizzare anche ${missing.join(', ')} premi di nuovo e autorizza l'accesso.` : '';
+      showToast(`✓ Sincronizzati ${totalEvents} eventi Calendar e ${totalTasks} task Google da ${ready.length} ${ready.length === 1 ? 'account' : 'account'}.${missingNote}`);
     } catch (err: any) {
       console.error('Sync error:', err);
-      showToast(`Sincronizzazione completata con dati protetti in memoria`);
+      showToast('Sincronizzazione non riuscita: riprova tra poco');
     } finally {
       setIsWorkspaceSyncing(false);
     }
@@ -4991,7 +5046,7 @@ export default function App() {
                     ))}
                     <button
                       className="btn sm"
-                      onClick={() => handleSyncCalendarAndTasks(activeWorkspaceAccount)}
+                      onClick={() => handleSyncCalendarAndTasks()}
                       disabled={isWorkspaceSyncing}
                       style={{ padding: '0 10px', height: '30px', fontSize: '11.5px', gap: '5px' }}
                       title="Sincronizza eventi da Google Calendar e task da Google Tasks"
@@ -5165,7 +5220,7 @@ export default function App() {
                     <span className="sp"></span>
                     <button
                       className="btn sm"
-                      onClick={() => handleSyncCalendarAndTasks(activeWorkspaceAccount)}
+                      onClick={() => handleSyncCalendarAndTasks()}
                       title="Ricarica task da Google"
                     >
                       ↻ Sincronizza
@@ -11185,7 +11240,7 @@ export default function App() {
                             {msg.subject}
                           </p>
                           <span className="text-[11px] font-mono text-slate-400">
-                            {msg.sender} · {msg.date}
+                            {msg.sender} · {msg.date}{msg.mailbox ? ` · ${msg.mailbox}` : ''}
                           </span>
                         </div>
                       </div>

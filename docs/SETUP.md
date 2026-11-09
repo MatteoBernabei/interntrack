@@ -39,6 +39,10 @@ A private instance (Firebase configured) **starts empty**: no sample application
 
 The public demo (no Firebase variables) always shows sample data.
 
+## Two Google accounts
+
+Mail, calendar and tasks are read from **all** the accounts listed in `VITE_GMAIL_ACCOUNTS` (and the signed-in one), merged in one view: recruiter emails show the mailbox they came from, calendar events and tasks of every account appear together. Only the daily networking email is sent from a single account (the first one). Browsers allow one Google window per click, so with two accounts press **Controlla ora** / **Sincronizza** a second time to authorize the other account. Permissions are kept in memory only: after a reload, authorize again.
+
 ## Environment variables
 
 | Variable | Purpose |
@@ -104,6 +108,10 @@ Un secondo progetto Vercel dallo stesso repository, con le variabili. I tuoi dat
 Un'istanza privata (con Firebase configurato) **parte vuota**: nessuna candidatura, contatto o evento di esempio. Aggiungi le candidature con **Nuova candidatura**, oppure importale con **Carica Excel / CSV** o da un backup JSON (Impostazioni). Finché sei collegato, ogni modifica viene salvata in automatico nel tuo database Firestore (`users/{il tuo id}/applications`), quindi i dati ci sono ancora al prossimo accesso, da qualsiasi browser. Impostazioni, coda del networking e loghi restano nel browser (i loghi anche su Firestore): ogni tanto esporta un backup JSON.
 
 La demo pubblica (senza variabili Firebase) mostra sempre dati di esempio.
+
+## Due account Google
+
+Posta, calendario e task vengono letti da **tutti** gli account elencati in `VITE_GMAIL_ACCOUNTS` (più quello con cui sei entrato) e uniti in un'unica vista: le email dei recruiter mostrano la casella di provenienza, e gli eventi e i task di ogni account compaiono insieme. Solo l'email giornaliera del networking parte da un unico account (il primo). Il browser permette una sola finestra Google per clic: con due account premi **Controlla ora** / **Sincronizza** una seconda volta per autorizzare l'altro. I permessi restano solo in memoria: dopo un ricaricamento vanno autorizzati di nuovo.
 
 ## Variabili d'ambiente
 

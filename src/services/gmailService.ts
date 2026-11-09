@@ -15,6 +15,7 @@ export interface RecruiterEmailMessage {
   detectedIntent: 'interview' | 'offer' | 'assessment' | 'rejection' | 'update' | 'general';
   suggestedAction: string;
   targetStatus?: 'todo' | 'applied' | 'interview' | 'offer' | 'rejected';
+  mailbox?: string; // which of the user's mailboxes the message was read from
 }
 
 // Extract clean email from "Name <email@domain.com>" or "email@domain.com"
