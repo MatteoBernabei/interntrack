@@ -5,7 +5,8 @@ export interface WelcomeAuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: User | null;
-  connectedAccounts: string[];
+  connectedAccounts: string[]; // accounts already authorized in this session (they have an access token)
+  configuredAccounts?: string[]; // accounts that should be connected (e.g. the mailboxes from the settings)
   activeAccount: string;
   onLoginGoogle: (hintEmail?: string) => Promise<void>;
   onSwitchAccount: (account: string) => void;
@@ -17,6 +18,7 @@ export const WelcomeAuthModal: React.FC<WelcomeAuthModalProps> = ({
   onClose,
   currentUser,
   connectedAccounts,
+  configuredAccounts = [],
   activeAccount,
   onLoginGoogle,
   onSwitchAccount,
@@ -26,6 +28,12 @@ export const WelcomeAuthModal: React.FC<WelcomeAuthModalProps> = ({
   const [secondEmailInput, setSecondEmailInput] = useState('');
 
   if (!isOpen) return null;
+
+  // Unified list: signed-in account first, then the configured mailboxes, then any other authorized account
+  const allAccounts: string[] = [];
+  [currentUser?.email || '', ...configuredAccounts, ...connectedAccounts].forEach((e) => {
+    if (e && !allAccounts.some((x) => x.toLowerCase() === e.toLowerCase())) allAccounts.push(e);
+  });
 
   const handleGoogleSignIn = async (hint?: string) => {
     setIsLoggingIn(true);
@@ -145,66 +153,63 @@ export const WelcomeAuthModal: React.FC<WelcomeAuthModalProps> = ({
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-bold text-slate-700 dark:text-slate-300">
-                    Account Google Monitorati ({connectedAccounts.length || 1}):
+                    Account Google Monitorati ({allAccounts.length}):
                   </span>
                   <span className="text-[11px] text-slate-500">
-                    Passa da uno all’altro con un clic
+                    Un account "Collegato" è autorizzato in questa sessione; "Autorizza" apre la finestra di Google
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  {/* Account 1: Principale */}
-                  <div
-                    onClick={() => currentUser.email && onSwitchAccount(currentUser.email)}
-                    className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                      activeAccount === currentUser.email
-                        ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 font-semibold'
-                        : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-                      <span>{currentUser.email}</span>
-                      <span className="text-[10.5px] text-slate-400 font-normal">(Principale)</span>
-                    </div>
-                    {activeAccount === currentUser.email && (
-                      <span className="text-blue-600 dark:text-blue-400 font-bold text-xs">✓ In Uso</span>
-                    )}
-                  </div>
-
-                  {/* Account secondari collegati */}
-                  {connectedAccounts
-                    .filter((acc) => acc.toLowerCase() !== (currentUser.email || '').toLowerCase())
-                    .map((acc) => (
+                  {allAccounts.map((acc) => {
+                    const isPrimary = acc.toLowerCase() === (currentUser.email || '').toLowerCase();
+                    const connected = connectedAccounts.some((c) => c.toLowerCase() === acc.toLowerCase());
+                    return (
                       <div
                         key={acc}
-                        onClick={() => onSwitchAccount(acc)}
-                        className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
-                          activeAccount === acc
-                            ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/40 font-semibold'
-                            : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                        className={`p-3 rounded-xl border flex items-center justify-between gap-2 transition-all ${
+                          activeAccount.toLowerCase() === acc.toLowerCase()
+                            ? 'border-blue-500 bg-blue-50/70 dark:bg-blue-950/40'
+                            : 'border-slate-200 dark:border-slate-700'
                         }`}
                       >
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
-                          <span>{acc}</span>
-                          <span className="text-[10.5px] text-slate-400 font-normal">(Secondario)</span>
+                        <div
+                          onClick={() => connected && onSwitchAccount(acc)}
+                          className={`flex items-center gap-2.5 min-w-0 ${connected ? 'cursor-pointer' : ''}`}
+                        >
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isPrimary ? 'bg-blue-500' : 'bg-purple-500'}`} />
+                          <span className="truncate">{acc}</span>
+                          <span className="text-[10.5px] text-slate-400 font-normal whitespace-nowrap">
+                            {isPrimary ? '(Principale)' : '(Secondario)'}
+                          </span>
                         </div>
-                        {activeAccount === acc && (
-                          <span className="text-blue-600 dark:text-blue-400 font-bold text-xs">✓ In Uso</span>
+                        {connected ? (
+                          <span className="text-emerald-600 dark:text-emerald-400 font-bold text-xs whitespace-nowrap">
+                            ✓ Collegato{activeAccount.toLowerCase() === acc.toLowerCase() ? ' · In uso' : ''}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={isLoggingIn}
+                            onClick={() => handleGoogleSignIn(acc)}
+                            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-white font-semibold text-xs cursor-pointer whitespace-nowrap"
+                          >
+                            Autorizza
+                          </button>
                         )}
                       </div>
-                    ))}
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Form per collegare un secondo account Google */}
               <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-2.5">
                 <span className="font-semibold text-slate-800 dark:text-slate-200 block">
-                  ➕ Collega un altro tuo account Google (es. account secondario / universitario):
+                  ➕ Collega un altro account non in elenco (opzionale):
                 </span>
                 <p className="text-[11.5px] text-slate-500 dark:text-slate-400">
-                  Puoi collegare un'altra casella Gmail, Google Calendar e Google Tasks per monitorarle entrambe dallo stesso tracker.
+                  Per gli account già in elenco usa il pulsante "Autorizza". Qui puoi aggiungerne un altro: scrivi l'indirizzo e premi Connetti.
                 </p>
                 <div className="flex gap-2">
                   <input

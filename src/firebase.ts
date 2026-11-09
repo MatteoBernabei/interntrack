@@ -1,4 +1,4 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged as firebaseOnAuthStateChanged, User } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 
@@ -62,10 +62,17 @@ export async function testConnection() {
 }
 
 // Auth helpers
-export async function loginWithGoogle(hintEmail?: string): Promise<{ user: User; accessToken: string }> {
+export async function loginWithGoogle(hintEmail?: string): Promise<{ user: User; accessToken: string; email?: string }> {
   try {
     if (!isFirebaseConfigured) {
       throw new Error('Demo mode: Google sign-in is not configured on this site.');
+    }
+    // A user is already signed in and ANOTHER account is requested: only fetch that account's access token,
+    // without replacing the signed-in user (which would switch the Firestore data area).
+    const primary = auth.currentUser?.email?.toLowerCase();
+    if (primary && hintEmail && hintEmail.trim().toLowerCase() !== primary) {
+      const extra = await connectExtraAccount(hintEmail.trim());
+      return { user: auth.currentUser as User, accessToken: extra.accessToken, email: extra.email };
     }
     isSigningIn = true;
     const provider = new GoogleAuthProvider();
@@ -93,6 +100,35 @@ export async function loginWithGoogle(hintEmail?: string): Promise<{ user: User;
   } finally {
     isSigningIn = false;
   }
+}
+
+// Signs an extra Google account in on a SEPARATE Firebase auth instance, only to obtain its access token
+// (Gmail, Calendar, Tasks, Sheets). The main user, and therefore the Firestore data, are never touched.
+export async function connectExtraAccount(hintEmail?: string): Promise<{ email: string; accessToken: string }> {
+  if (!isFirebaseConfigured) {
+    throw new Error('Demo mode: Google sign-in is not configured on this site.');
+  }
+  const extraApp = getApps().find((a) => a.name === 'extra-accounts') ?? initializeApp(firebaseConfig, 'extra-accounts');
+  const extraAuth = getAuth(extraApp);
+  const provider = new GoogleAuthProvider();
+  GOOGLE_SCOPES.forEach((scope) => provider.addScope(scope));
+  const params: Record<string, string> = { prompt: 'select_account' };
+  if (hintEmail) params.login_hint = hintEmail;
+  provider.setCustomParameters(params);
+
+  const result = await signInWithPopup(extraAuth, provider);
+  const credential = GoogleAuthProvider.credentialFromResult(result);
+  const accessToken = credential?.accessToken || '';
+  const email = (result.user.email || hintEmail || '').toLowerCase();
+  if (accessToken && email) {
+    accountTokensMap.set(email, accessToken);
+  }
+  try {
+    await signOut(extraAuth); // the extra session is not needed after the token has been collected
+  } catch (e) {
+    // ignore
+  }
+  return { email, accessToken };
 }
 
 export function getAccessToken(email?: string): string | null {

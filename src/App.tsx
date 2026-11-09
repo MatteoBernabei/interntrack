@@ -132,6 +132,21 @@ const BASE_SEARCH_CONFIG = DEMO
         flagLanguagesInAds: [] as string[],
       },
     };
+// Mailboxes listed from the start in real mode: VITE_GMAIL_ACCOUNTS="main@gmail.com,second@gmail.com"
+// The first one receives the daily report; all of them are read for recruiter replies.
+const SEEDED_GMAIL_ACCOUNTS: GmailAccountConfig[] = ((((import.meta as any).env?.VITE_GMAIL_ACCOUNTS as string) || '') as string)
+  .split(',')
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean)
+  .map((email, i) => ({
+    id: `gm-${i + 1}`,
+    email,
+    label: i === 0 ? 'Principale (ricezione report e lettura risposte)' : 'Secondaria (sola lettura risposte recruiter)',
+    isReceiver: i === 0,
+    isReader: true,
+    status: 'Attivo' as const,
+    lastChecked: 'Mai',
+  }));
 const EMPTY_APP: MockApp = {
   id: '', co: '', role: '', st: 'todo', fit: 0, city: '', country: '', mode: '', pl: '', nx: ['—', 'info'], comp: '—', sent: '—', prio: 'Media', act: 'sent',
 };
@@ -389,6 +404,7 @@ export default function App() {
   const lastSyncedRef = useRef<Map<string, string>>(new Map());
   const appsRef = useRef<MockApp[]>(apps);
   const [cloudTick, setCloudTick] = useState<number>(0);
+  const [, setAccountsTick] = useState<number>(0);
   useEffect(() => {
     appsRef.current = apps;
   }, [apps]);
@@ -1410,9 +1426,13 @@ export default function App() {
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccountConfig[]>(() => {
     try {
       const saved = localStorage.getItem('intern_track_gmail_accounts');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // an empty list saved by an earlier run must not hide the mailboxes configured in the variables
+        if (DEMO || !Array.isArray(parsed) || parsed.length > 0) return parsed;
+      }
     } catch (e) {}
-    return sample(INITIAL_GMAIL_ACCOUNTS, []);
+    return sample(INITIAL_GMAIL_ACCOUNTS, SEEDED_GMAIL_ACCOUNTS);
   });
 
   // Save Gmail accounts to localStorage
@@ -11071,17 +11091,31 @@ export default function App() {
         isOpen={isWelcomeModalOpen}
         onClose={() => setIsWelcomeModalOpen(false)}
         currentUser={currentUser}
-        connectedAccounts={getConnectedAccounts().length > 0 ? getConnectedAccounts() : (currentUser?.email ? [currentUser.email] : [])}
+        connectedAccounts={getConnectedAccounts()}
+        configuredAccounts={gmailAccounts.map((g) => g.email)}
         activeAccount={activeWorkspaceAccount}
         onLoginGoogle={async (hint) => {
+          if (!hint && currentUser) {
+            showToast('Scrivi l’indirizzo dell’account da collegare, oppure usa "Autorizza" accanto a un account dell’elenco');
+            return;
+          }
           try {
             const res = await loginWithGoogle(hint);
-            showToast(`✓ Connesso con Google: ${res.user.email}`);
-            if (res.user.email) {
-              setActiveWorkspaceAccount(res.user.email);
+            const connected = res.email || res.user?.email;
+            showToast(`✓ Connesso con Google: ${connected}`);
+            if (connected) {
+              setActiveWorkspaceAccount(connected);
             }
-          } catch (e) {
-            showToast('Accesso Google annullato o non riuscito');
+            setAccountsTick((t) => t + 1); // refresh the list of connected accounts
+          } catch (e: any) {
+            const code = String(e?.code || '');
+            if (code.includes('popup-blocked')) {
+              showToast('Il browser ha bloccato la finestra di Google: consenti i popup per questo sito e riprova');
+            } else if (code.includes('popup-closed-by-user') || code.includes('cancelled-popup-request')) {
+              showToast('Finestra di Google chiusa prima di completare l\'accesso: riprova e, se compare "app non verificata", scegli Avanzate → Vai a InternTrack');
+            } else {
+              showToast('Accesso Google annullato o non riuscito');
+            }
           }
         }}
         onSwitchAccount={(acc) => {

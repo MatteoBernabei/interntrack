@@ -54,6 +54,7 @@ Mail, calendar and tasks are read from **all** the accounts listed in `VITE_GMAI
 | `ALLOWED_EMAILS` | Comma-separated emails allowed to use the AI features. Without it the AI routes stay closed |
 | `CANDIDATE_NAME`, `CANDIDATE_PROFILE` | Profile used in the AI prompts |
 | `VITE_OWNER_EMAIL`, `VITE_DEFAULT_SHEET_ID` | Optional defaults |
+| `VITE_GMAIL_ACCOUNTS` | Mailboxes listed from the start, comma-separated (the first one receives the daily report) |
 | `VITE_ENABLE_GMAIL` | `true` to enable Gmail reading (private instance only) |
 
 The full list with comments is in [`.env.example`](../.env.example).
@@ -124,6 +125,7 @@ Posta, calendario e task vengono letti da **tutti** gli account elencati in `VIT
 | `ALLOWED_EMAILS` | Email autorizzate alle funzioni AI, separate da virgola. Senza questa variabile le rotte AI restano chiuse |
 | `CANDIDATE_NAME`, `CANDIDATE_PROFILE` | Profilo usato nei prompt AI |
 | `VITE_OWNER_EMAIL`, `VITE_DEFAULT_SHEET_ID` | Valori predefiniti opzionali |
+| `VITE_GMAIL_ACCOUNTS` | Caselle elencate fin dall'inizio, separate da virgola (la prima riceve il report giornaliero) |
 | `VITE_ENABLE_GMAIL` | `true` per attivare la lettura di Gmail (solo istanza privata) |
 
 L'elenco completo, con commenti, è in [`.env.example`](../.env.example).
