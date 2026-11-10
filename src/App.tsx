@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import SearchPlanView, { type RicProgress } from './components/SearchPlanView';
+import { buildSearchPlan, listCountries, toISODate } from './searchPlan';
 import * as XLSX from 'xlsx';
 import { appLang, tr, translateTo } from './i18n';
 import { LanguageSwitch, useAppLang } from './i18n/LanguageSwitch';
@@ -106,6 +108,25 @@ if (!DEMO) {
   }
 }
 
+// Second one-time cleanup: the personal profile fields stored by an earlier build contained the sample persona.
+if (!DEMO) {
+  try {
+    if (!localStorage.getItem('interntrack_real_mode_v2')) {
+      localStorage.removeItem('intern_track_search_config');
+      localStorage.setItem('interntrack_real_mode_v2', '1');
+    }
+  } catch {
+    // storage unavailable
+  }
+}
+
+// Sidebar badge: the sample number in the demo, the real count otherwise (hidden when it is zero)
+const NavBadge = ({ demo, real, hot = true }: { demo: number; real: number; hot?: boolean }) => {
+  const value = DEMO ? demo : real;
+  if (!DEMO && value <= 0) return null;
+  return <span className={hot ? 'n hot' : 'n'}>{value}</span>;
+};
+
 // "€1.400/m" -> 1400
 const parseComp = (v: string): number => {
   const m = (v || '').replace(/\./g, '').match(/\d{3,6}/);
@@ -130,6 +151,16 @@ const BASE_SEARCH_CONFIG = DEMO
         education: '',
         languages: [] as Array<{ language: string; level: string }>,
         flagLanguagesInAds: [] as string[],
+      },
+      // The research plan starts today and runs for 8 weeks; the dates can be changed in the settings
+      searchPlan: {
+        ...INITIAL_SEARCH_CONFIG.searchPlan,
+        startDate: toISODate(new Date()),
+        endDate: (() => {
+          const d = new Date();
+          d.setDate(d.getDate() + 56);
+          return toISODate(d);
+        })(),
       },
     };
 // Mailboxes listed from the start in real mode: VITE_GMAIL_ACCOUNTS="main@gmail.com,second@gmail.com"
@@ -380,6 +411,20 @@ export default function App() {
   const rmInterviewApps = apps.filter((a) => a.st === 'interview').slice(0, 3);
   const rmNextApps = apps.filter((a) => a.act === 'send' || a.act === 'follow').slice(0, 3);
   const rmToday = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
+  const rmOpenTasks = googleTasksList.filter((t) => t.status !== 'completed');
+  const rmActionApps = apps.filter((a) => a.act === 'send' || a.act === 'follow');
+  const rmTodayCount = rmOpenTasks.length + rmActionApps.length;
+  const rmCityRows = (() => {
+    const m = new Map<string, { n: number; resp: number }>();
+    apps.forEach((a) => {
+      const c = (a.city || '').trim() || '—';
+      const cur = m.get(c) || { n: 0, resp: 0 };
+      cur.n += 1;
+      if (a.st === 'interview' || a.st === 'offer' || a.st === 'rejected') cur.resp += 1;
+      m.set(c, cur);
+    });
+    return Array.from(m.entries()).sort((x, y) => y[1].n - x[1].n).slice(0, 5);
+  })();
   const [calMonthOffset, setCalMonthOffset] = useState<number>(0);
   const rmCal = useMemo(() => {
     const now = new Date();
@@ -850,6 +895,25 @@ export default function App() {
       localStorage.setItem('intern_track_search_config', JSON.stringify(searchConfig));
     } catch (e) {}
   }, [searchConfig]);
+
+  // Research plan generated from the search profile + progress saved in the browser
+  const [ricProgress, setRicProgress] = useState<RicProgress>(() => {
+    try {
+      const saved = localStorage.getItem('intern_track_ric_progress_v1');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {};
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('intern_track_ric_progress_v1', JSON.stringify(ricProgress));
+    } catch (e) {}
+  }, [ricProgress]);
+  const [ricMode, setRicMode] = useState<'day' | 'all'>('day');
+  const [ricDay, setRicDay] = useState<string | null>(null);
+  const rmPlan = useMemo(() => buildSearchPlan(searchConfig), [searchConfig]);
+  const rmTodaySessions = rmPlan.days.find((d) => d.date === toISODate(new Date()))?.sessions ?? [];
+  const rmTodayRemaining = rmTodaySessions.filter((s) => !ricProgress[s.id]?.done).length;
 
   // Hub Networking LinkedIn Coda State
   const [hubCoda, setHubCoda] = useState<HubCodaItem[]>(() => {
@@ -3288,7 +3352,7 @@ export default function App() {
             aria-label={`Profilo: ${userFullName}`}
             onClick={() => handleGo('cv')}
           >
-            <span>AR</span>
+            <span>{DEMO ? 'AR' : ini(userFullName)}</span>
           </div>
 
           <div className="lbl">Principale</div>
@@ -3549,7 +3613,7 @@ export default function App() {
                 >
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M8.5 12.5l2.5 2.5 4.5-5" /></svg>
                   <span>Task per oggi</span>
-                  <span className="n hot">2</span>
+                  <NavBadge demo={2} real={rmTodayCount} />
                 </button>
                 <button
                   className="nv"
@@ -3680,21 +3744,40 @@ export default function App() {
             {currentSec === 'ric' && (
               <>
                 <div className="grp">Piano di ricerca</div>
-                <button className="nv" aria-current={view === 'ric'} onClick={() => handleGo('ric')}>
+                <button
+                  className="nv"
+                  aria-current={view === 'ric' && ricMode === 'day'}
+                  onClick={() => {
+                    setRicMode('day');
+                    setRicDay(null);
+                    handleGo('ric');
+                  }}
+                >
                   <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M20 20l-4.2-4.2" /></svg>
                   <span>Oggi</span>
-                  <span className="n hot">4</span>
+                  <NavBadge demo={4} real={rmTodayRemaining} />
                 </button>
-                <button className="nv" onClick={() => showToast('Elenco di tutte le 192 sessioni')}>
+                <button
+                  className="nv"
+                  aria-current={view === 'ric' && ricMode === 'all'}
+                  onClick={() => {
+                    if (DEMO) {
+                      showToast('Elenco di tutte le 192 sessioni');
+                    } else {
+                      setRicMode('all');
+                      handleGo('ric');
+                    }
+                  }}
+                >
                   <svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12" /><circle cx="4.5" cy="6" r="1" /><circle cx="4.5" cy="12" r="1" /><circle cx="4.5" cy="18" r="1" /></svg>
                   <span>Tutte le sessioni</span>
-                  <span className="n">192</span>
+                  <NavBadge demo={192} real={rmPlan.total} hot={false} />
                 </button>
                 <div className="grp">Altre ricerche</div>
                 <button className="nv" aria-current={view === 'siti'} onClick={() => handleGo('siti')}>
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5" /><path d="M3.5 12h17M12 3.5c2.6 2.4 2.6 14.6 0 17M12 3.5c-2.6 2.4-2.6 14.6 0 17" /></svg>
                   <span>Siti carriere</span>
-                  <span className="n">28</span>
+                  <NavBadge demo={28} real={0} hot={false} />
                 </button>
               </>
             )}
@@ -3724,7 +3807,7 @@ export default function App() {
                 >
                   <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" /></svg>
                   <span>Consigliati di Oggi</span>
-                  <span className="n hot">3</span>
+                  <NavBadge demo={3} real={dailyCompanies.length + dailyPeople.length} />
                 </button>
                 <button
                   className="nv"
@@ -3762,7 +3845,7 @@ export default function App() {
                 <button className="nv" aria-current={true}>
                   <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 01-3.46 0" /></svg>
                   <span>Tutte le notifiche</span>
-                  <span className="n hot">3</span>
+                  <NavBadge demo={3} real={notifications.filter((n) => n.unread).length} />
                 </button>
                 <button className="nv" onClick={() => showToast('Tutte le notifiche sono state contrassegnate come lette')}>
                   <span>Segna lette</span>
@@ -4168,11 +4251,15 @@ export default function App() {
                       }}
                       title="Sincronizzato con Google Tasks e notifiche smartphone"
                     >
-                      📱 Google Tasks ({activeWorkspaceAccount})
+                      📱 Google Tasks ({DEMO ? activeWorkspaceAccount : accountsToSync().join(' · ') || 'non collegato'})
                     </span>
                   </div>
                   <span className="count">
-                    {googleTasksList.filter((t) => t.status === 'completed').length + Object.values(taskDone).filter(Boolean).length} completati
+                    {DEMO ? (
+                      <>{googleTasksList.filter((t) => t.status === 'completed').length + Object.values(taskDone).filter(Boolean).length} completati</>
+                    ) : (
+                      <>{rmTodayCount} da fare · {googleTasksList.filter((t) => t.status === 'completed').length} completati</>
+                    )}
                   </span>
                   <span className="sp"></span>
                   <button className="link" onClick={() => { setCalTab('cal'); handleGo('cal'); }}>
@@ -4254,7 +4341,7 @@ export default function App() {
                     </>
                   )}
                   {/* Live Google Tasks items */}
-                  {googleTasksList.slice(0, 3).map((gt) => (
+                  {googleTasksList.slice(0, DEMO ? 3 : 8).map((gt) => (
                     <label
                       className="tk"
                       key={gt.id}
@@ -4286,7 +4373,19 @@ export default function App() {
                       </span>
                     </label>
                   ))}
-                  {!DEMO && googleTasksList.length === 0 && (
+                  {!DEMO &&
+                    rmActionApps.map((a) => (
+                      <div className="tk" key={`act-${a.id}`} onClick={() => setDrawerApp(a)} style={{ cursor: 'pointer' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <b>{a.act === 'send' ? 'Invia candidatura' : 'Follow-up'} · {a.co}</b>
+                          <span style={{ display: 'block', fontSize: '11.5px', color: 'var(--muted)' }}>{a.role}</span>
+                        </div>
+                        <span className="nxt info" style={{ fontSize: '10.5px', padding: '2px 6px' }}>
+                          {a.act === 'send' ? 'Da inviare' : 'Follow-up'}
+                        </span>
+                      </div>
+                    ))}
+                  {!DEMO && googleTasksList.length === 0 && rmActionApps.length === 0 && (
                     <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Nessuna attività per oggi</span>
                   )}
                 </div>
@@ -4500,6 +4599,8 @@ export default function App() {
                     </tr>
                   </thead>
                   <tbody>
+                    {DEMO ? (
+                      <>
                     <tr>
                       <td>
                         <span className="plat">
@@ -4570,7 +4671,34 @@ export default function App() {
                         <span className="pill">0 su 6</span>
                       </td>
                     </tr>
-                  </tbody>
+                                        </>
+                    ) : (
+                      <>
+                    {rmCityRows.length === 0 && (
+                      <tr>
+                        <td colSpan={3} style={{ color: 'var(--muted)', fontSize: '12px' }}>Nessuna candidatura nel tracker</td>
+                      </tr>
+                    )}
+                    {rmCityRows.map(([city, st], i) => (
+                      <tr key={city}>
+                        <td>
+                          <span className="plat">
+                            <i className="pd" style={{ background: ['#78b0ff', '#b4a0ff', '#5ee0a0', '#ffbe5c', '#ff8fa3'][i % 5] }}></i>
+                            {city}{' '}
+                            <b style={{ color: 'var(--text)' }}>{st.n}</b>
+                          </span>
+                        </td>
+                        <td>
+                          <div className="bar"><i style={{ width: `${Math.round((st.n * 100) / Math.max(apps.length, 1))}%` }}></i></div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span className="pill">{st.resp} su {st.n}</span>
+                        </td>
+                      </tr>
+                    ))}
+                      </>
+                    )}
+</tbody>
                 </table>
               </article>
             </div>
@@ -5507,6 +5635,8 @@ export default function App() {
           {/* ==============================================================
               VIEW 4: PIANO DI RICERCA (v-ric)
               ============================================================== */}
+          {DEMO ? (
+            <>
           <section className={`view ${view === 'ric' ? 'on' : ''}`} id="v-ric" aria-label="Piano di ricerca">
             <article className="card">
               <div className="hd" style={{ flexWrap: 'wrap', gap: '10px' }}>
@@ -5811,6 +5941,31 @@ export default function App() {
               </div>
             </article>
           </section>
+            </>
+          ) : (
+            <SearchPlanView
+              active={view === 'ric'}
+              plan={rmPlan}
+              progress={ricProgress}
+              setProgress={setRicProgress}
+              mode={ricMode}
+              setMode={setRicMode}
+              day={ricDay}
+              setDay={setRicDay}
+              roleFilter={ricRoleFilter}
+              setRoleFilter={setRicRoleFilter}
+              countryFilter={ricCityFilter}
+              setCountryFilter={setRicCityFilter}
+              positions={searchConfig.positions.filter((x) => x.enabled).map((x) => ({ id: x.id, name: x.name }))}
+              countries={listCountries(searchConfig)}
+              onAddApplication={() => setIsModalOpen(true)}
+              onOpenSettings={() => {
+                setSetSubTab('config');
+                handleGo('set');
+              }}
+              showToast={showToast}
+            />
+          )}
 
           {/* ==============================================================
               VIEW 5: SITI CARRIERE (v-siti) CON LOGHI UNIFORMI
@@ -5965,7 +6120,7 @@ export default function App() {
                       borderColor: 'transparent',
                     }}
                   >
-                    🌟 Oggi (3 Consigliati)
+                    {DEMO ? '🌟 Oggi (3 Consigliati)' : `🌟 Oggi (${dailyCompanies.length + dailyPeople.length} Consigliati)`}
                   </button>
                   <button
                     type="button"
@@ -6617,7 +6772,11 @@ export default function App() {
                               Tutti i {hubCoda.length} Contatti del Database Risultano Già Contattati!
                             </h4>
                             <p style={{ margin: '0 auto 16px', maxWidth: '580px', fontSize: '12.5px', color: 'var(--muted)', lineHeight: '1.5' }}>
-                              Tutte le persone e le 38 aziende censite nel tuo file sono state registrate come <b>Richiesta inviata</b> e salvate nell'archivio storico delle esclusioni.
+                              {DEMO ? (
+                                <>Tutte le persone e le 38 aziende censite nel tuo file sono state registrate come <b>Richiesta inviata</b> e salvate nell'archivio storico delle esclusioni.</>
+                              ) : (
+                                <>Le {processedCompanies.length} aziende già proposte sono registrate come <b>Richiesta inviata</b> e salvate nell'archivio storico delle esclusioni.</>
+                              )}
                               <br />
                               La coda attiva per questa settimana è pronta per essere rifornita con nuove opportunità: avvia la scansione per estrarre 21 nuove aziende e persone (7 per categoria).
                             </p>
@@ -6628,7 +6787,7 @@ export default function App() {
                                 onClick={handlePopulateSundayHubCoda}
                                 style={{ height: '38px', padding: '0 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
                               >
-                                {isScoutingSunday ? '⏳ Ricerca Settimanale in corso (21 aziende + 21 persone)...' : '⚡ Avvia Scansione Ciclo #9 (21 Nuove Aziende & Coda)'}
+                                {isScoutingSunday ? '⏳ Ricerca Settimanale in corso (21 aziende + 21 persone)...' : (DEMO ? '⚡ Avvia Scansione Ciclo #9 (21 Nuove Aziende & Coda)' : '⚡ Avvia Scansione (21 Nuove Aziende & Coda)')}
                               </button>
                               <button
                                 className="btn"
@@ -8156,7 +8315,7 @@ export default function App() {
                           }}
                           style={{ height: '36px', padding: '0 18px', fontSize: '12.5px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                         >
-                          {isScoutingSunday ? '⏳ Scansione in corso...' : '⚡ Salva & Avvia Scansione Ciclo #9'}
+                          {isScoutingSunday ? '⏳ Scansione in corso...' : (DEMO ? '⚡ Salva & Avvia Scansione Ciclo #9' : '⚡ Salva & Avvia Scansione')}
                         </button>
                       </div>
                     </div>
@@ -8800,7 +8959,11 @@ export default function App() {
                     <span className="pill" style={{ fontSize: '10.5px' }}>Attiva</span>
                   </h4>
                   <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
-                    I controlli automatici avvengono alle <strong>08:00</strong> di mattina e alle <strong>18:00</strong> del pomeriggio. Puoi forzare la sincronizzazione in qualsiasi momento.
+                    {DEMO ? (
+                      <>I controlli automatici avvengono alle <strong>08:00</strong> di mattina e alle <strong>18:00</strong> del pomeriggio. Puoi forzare la sincronizzazione in qualsiasi momento.</>
+                    ) : (
+                      <>Le notifiche si aggiornano quando premi <strong>Controlla ora</strong> o <strong>Sincronizza</strong>: non ci sono controlli automatici in background.</>
+                    )}
                   </p>
                 </div>
                 <button
@@ -8986,7 +9149,7 @@ export default function App() {
                         borderColor: 'transparent',
                       }}
                     >
-                      📫 Caselle Gmail (2 Account)
+                      {DEMO ? '📫 Caselle Gmail (2 Account)' : `📫 Caselle Gmail (${gmailAccounts.length} ${gmailAccounts.length === 1 ? 'Account' : 'Account'})`}
                     </button>
                     <button
                       type="button"
@@ -9301,7 +9464,7 @@ export default function App() {
                   <article className="card">
                     <div className="hd" style={{ flexWrap: 'wrap', gap: '8px' }}>
                       <div>
-                        <h4 style={{ margin: 0, fontSize: '14px' }}>5. Paesi e Città Target (14 Paesi Europei)</h4>
+                        <h4 style={{ margin: 0, fontSize: '14px' }}>{DEMO ? '5. Paesi e Città Target (14 Paesi Europei)' : `5. Paesi e Città Target (${listCountries(searchConfig).length} Paesi)`}</h4>
                         <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--muted)' }}>
                           Spagna, Germania, Irlanda, Paesi Bassi, Lussemburgo, Austria, Belgio, Portogallo, Svezia, Danimarca, Svizzera, Francia, Polonia, Regno Unito, Italia
                         </p>
@@ -9503,6 +9666,8 @@ export default function App() {
                         <h4 style={{ margin: 0, fontSize: '14px' }}>8. Piano di Ricerca Operativo</h4>
                       </div>
                       <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px' }}>
+                        {DEMO ? (
+                          <>
                         <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--rim)' }}>
                           <span style={{ color: 'var(--muted)' }}>Periodo attivo:</span>
                           <b>24 ott – 18 dic 2026</b>
@@ -9523,6 +9688,60 @@ export default function App() {
                           <span style={{ color: 'var(--muted)' }}>Promemoria Follow-up:</span>
                           <b>7 giorni post-invio candidatura</b>
                         </div>
+                          </>
+                        ) : (
+                          <>
+                        {(() => {
+                          const plan = searchConfig.searchPlan;
+                          const upd = (patch: Partial<typeof plan>) =>
+                            setSearchConfig((prev) => ({ ...prev, searchPlan: { ...prev.searchPlan, ...patch } }));
+                          const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', padding: '6px 0', borderBottom: '1px solid var(--rim)', flexWrap: 'wrap' };
+                          const dayKeys = ['lun', 'mar', 'mer', 'gio', 'ven', 'sab', 'dom'];
+                          const num = (value: number, onChange: (n: number) => void, min: number, label: string) => (
+                            <input type="number" min={min} value={value} aria-label={label} style={{ width: '84px' }} onChange={(e) => onChange(Math.max(min, Number(e.target.value) || min))} />
+                          );
+                          return (
+                            <>
+                              <div style={row}>
+                                <span style={{ color: 'var(--muted)' }}>Periodo attivo:</span>
+                                <span style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                  <input type="date" value={plan.startDate} aria-label="Inizio del piano" onChange={(e) => upd({ startDate: e.target.value })} />
+                                  –
+                                  <input type="date" value={plan.endDate} min={plan.startDate} aria-label="Fine del piano" onChange={(e) => upd({ endDate: e.target.value })} />
+                                </span>
+                              </div>
+                              <div style={row}>
+                                <span style={{ color: 'var(--muted)' }}>Giorni operativi:</span>
+                                <span style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                  {dayKeys.map((k) => (
+                                    <button
+                                      key={k}
+                                      type="button"
+                                      className={`fchip ${plan.activeDays.includes(k) ? 'active' : ''}`}
+                                      onClick={() => upd({ activeDays: plan.activeDays.includes(k) ? plan.activeDays.filter((x) => x !== k) : [...plan.activeDays, k] })}
+                                    >
+                                      {k}
+                                    </button>
+                                  ))}
+                                </span>
+                              </div>
+                              <div style={row}>
+                                <span style={{ color: 'var(--muted)' }}>Tempo al giorno (minuti):</span>
+                                {num(plan.minutesPerDay, (n) => upd({ minutesPerDay: n }), 10, 'Minuti al giorno')}
+                              </div>
+                              <div style={row}>
+                                <span style={{ color: 'var(--muted)' }}>Siti carriere al giorno:</span>
+                                {num(plan.sitesPerDay, (n) => upd({ sitesPerDay: n }), 0, 'Siti carriere al giorno')}
+                              </div>
+                              <div style={{ ...row, borderBottom: 'none' }}>
+                                <span style={{ color: 'var(--muted)' }}>Promemoria follow-up (giorni):</span>
+                                {num(plan.followUpDays, (n) => upd({ followUpDays: n }), 1, 'Giorni per il follow-up')}
+                              </div>
+                            </>
+                          );
+                        })()}
+                          </>
+                        )}
                       </div>
                     </article>
 
