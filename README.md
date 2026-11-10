@@ -80,11 +80,11 @@ Configuration, the private instance, Google verification and free-tier limits ar
 
 ## Project status
 
-A personal project that I use for my own search. Built with AI assistance (Google AI Studio and Claude), then reviewed, cleaned up and secured by me. Known limits: no automated tests yet; Google's verification caps the public sign-in at 100 users, which is why Gmail is off by default; translation uses a runtime dictionary rather than a full i18n layer.
+A personal project that I use for my own search. Built with AI assistance (Google AI Studio and Claude), then reviewed, cleaned up and secured by me. Known limits: automated tests cover only the basics so far; Google's verification caps the public sign-in at 100 users, which is why Gmail is off by default; translation uses a runtime dictionary rather than a full i18n layer.
 
 ## License
 
-To be defined by the author.
+All rights reserved. The code is public so that it can be read and evaluated; it may not be copied, modified or reused without the author's written permission. See [LICENSE](LICENSE).
 
 [↑ Back to top](#top)
 
@@ -151,10 +151,10 @@ Configurazione, istanza privata, verifica Google e limiti dei piani gratuiti son
 
 ## Stato del progetto
 
-Progetto personale che uso per la mia ricerca. Realizzato con l'aiuto di strumenti AI (Google AI Studio e Claude), poi rivisto, ripulito e messo in sicurezza da me. Limiti noti: non ci sono ancora test automatici; la verifica di Google limita l'accesso pubblico a 100 utenti, per questo Gmail è spento di default; la traduzione usa un dizionario a runtime e non un vero livello i18n.
+Progetto personale che uso per la mia ricerca. Realizzato con l'aiuto di strumenti AI (Google AI Studio e Claude), poi rivisto, ripulito e messo in sicurezza da me. Limiti noti: i test automatici coprono per ora solo le basi; la verifica di Google limita l'accesso pubblico a 100 utenti, per questo Gmail è spento di default; la traduzione usa un dizionario a runtime e non un vero livello i18n.
 
 ## Licenza
 
-Da definire dall'autore.
+Tutti i diritti riservati. Il codice è pubblico perché possa essere letto e valutato; non può essere copiato, modificato o riutilizzato senza il permesso scritto dell'autore. Vedi [LICENSE](LICENSE).
 
 [↑ Torna su](#top)

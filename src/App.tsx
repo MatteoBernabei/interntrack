@@ -140,6 +140,9 @@ const BASE_SEARCH_CONFIG = DEMO
   ? INITIAL_SEARCH_CONFIG
   : {
       ...INITIAL_SEARCH_CONFIG,
+      // Real mode: no pre-filled roles or cities. The user adds their own in the settings.
+      positions: [] as typeof INITIAL_SEARCH_CONFIG.positions,
+      cities: [] as typeof INITIAL_SEARCH_CONFIG.cities,
       userProfile: {
         ...INITIAL_SEARCH_CONFIG.userProfile,
         fullName: '',
@@ -4249,7 +4252,7 @@ export default function App() {
                         alignItems: 'center',
                         gap: '4px',
                       }}
-                      title="Sincronizzato con Google Tasks e notifiche smartphone"
+                      title={DEMO ? 'Sincronizzato con Google Tasks e notifiche smartphone' : 'Task letti da Google Tasks'}
                     >
                       📱 Google Tasks ({DEMO ? activeWorkspaceAccount : accountsToSync().join(' · ') || 'non collegato'})
                     </span>
@@ -4717,7 +4720,7 @@ export default function App() {
                     className="btn sm"
                     onClick={handleSyncAllAppsToFirestore}
                     disabled={isCloudSyncing}
-                    title={`Sincronizzato con Firestore (${currentUser.email})`}
+                    title={DEMO ? `Sincronizzato con Firestore (${currentUser.email})` : `Salva le candidature nel cloud (${currentUser.email})`}
                     style={{ gap: '6px', borderColor: 'rgba(52, 199, 89, 0.4)' }}
                   >
                     <span>☁️</span> {isCloudSyncing ? 'Sincronizzo…' : 'Salva su Cloud Firestore'}
@@ -5208,10 +5211,10 @@ export default function App() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', paddingTop: '10px', borderTop: '1px solid var(--rim)', fontSize: '11.5px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#10b981', fontWeight: 600 }}>
-                      <span>●</span> Google Calendar: Sincronizzato ({googleCalendarEvents.length} eventi)
+                      <span>●</span> {DEMO ? <>Google Calendar: Sincronizzato ({googleCalendarEvents.length} eventi)</> : <>Google Calendar: {googleCalendarEvents.length} eventi letti</>}
                     </span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#3b82f6', fontWeight: 600 }}>
-                      <span>📱</span> Google Tasks: Notifiche Smartphone Attive ({googleTasksList.filter(t => t.status !== 'completed').length} attivi)
+                      <span>📱</span> {DEMO ? <>Google Tasks: Notifiche Smartphone Attive ({googleTasksList.filter(t => t.status !== 'completed').length} attivi)</> : <>Google Tasks: {googleTasksList.filter(t => t.status !== 'completed').length} da fare</>}
                     </span>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', color: '#8b5cf6', fontWeight: 500 }}>
                       <span>☁️</span> Firestore DB: Connesso
@@ -6664,14 +6667,20 @@ export default function App() {
                         <div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <b style={{ fontSize: '13.5px', color: 'var(--text)' }}>
-                              Automazione Quotidiana Attiva (Zero Pulsanti)
+                              {DEMO ? 'Automazione Quotidiana Attiva (Zero Pulsanti)' : 'Email del giorno'}
                             </b>
-                            <span className="pill" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#16a34a', fontWeight: 700 }}>
-                              ✓ Sincronizzato con Google Sheet
-                            </span>
+                            {DEMO && (
+                              <span className="pill" style={{ background: 'rgba(34, 197, 94, 0.15)', color: '#16a34a', fontWeight: 700 }}>
+                                ✓ Sincronizzato con Google Sheet
+                              </span>
+                            )}
                           </div>
                           <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--muted)' }}>
-                            Ogni mattina invia in automatico l'email HTML alla tua casella e controlla se hai risposto dal telefono con <code>LN FATTO</code> o <code>LN SALTA</code>.
+                            {DEMO ? (
+                              <>Ogni mattina invia in automatico l'email HTML alla tua casella e controlla se hai risposto dal telefono con <code>LN FATTO</code> o <code>LN SALTA</code>.</>
+                            ) : (
+                              <>L'email con i contatti del giorno parte quando apri l'app con Google autorizzato, oppure dal pulsante. Per aggiornare lo stato rispondi all'email con <code>LN FATTO</code> o <code>LN SALTA</code>.</>
+                            )}
                           </p>
                         </div>
                       </div>
@@ -8956,7 +8965,7 @@ export default function App() {
                 <div>
                   <h4 style={{ margin: 0, fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span>📬 Automazione Gmail Recruiter</span>
-                    <span className="pill" style={{ fontSize: '10.5px' }}>Attiva</span>
+                    {DEMO && <span className="pill" style={{ fontSize: '10.5px' }}>Attiva</span>}
                   </h4>
                   <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'var(--muted)' }}>
                     {DEMO ? (
