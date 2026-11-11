@@ -1,13 +1,38 @@
 import dictionary from './en.json';
 import patternDict from './en.patterns.json';
+import { isFirebaseConfigured } from '../firebase';
 import { appLang, onLangChange } from './index';
+import realEnDict from './real.en.json';
+import realItDict from './real.it.json';
 
 // Runtime, display-only, reversible translation (Italian source → English).
 // It rewrites text nodes and a few attributes (placeholder, title, aria-label, alt) after React renders them,
 // and puts the original text back when the language is switched to Italian.
 // App state and logic keep using the original values, so nothing else in the app changes.
 
+//
+// REAL APP ONLY (Firebase configured). The public demo is never touched by what follows.
+// In the real app the same mechanism also cleans up the wording, in both languages:
+//   - real.it.json  maps an Italian source text to the cleaner Italian text shown to the user;
+//   - real.en.json  maps an Italian source text to its English text (it wins over en.json);
+//   - emoji mixed into a label are removed (a text made only of an emoji is an icon and is left alone).
+// Keys can be written with or without the emoji of the source text.
+
 type Dict = Record<string, string>;
+
+const REAL = isFirebaseConfigured;
+const KEEP_SYMBOLS = new Set(['✓', '✔', '●', '○', '★', '☆', '©', '®', '™', '↗', '↔', '▶', '◀', '▲', '▼']);
+const EMOJI_RE = /[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}][\uFE0F\u{1F3FB}-\u{1F3FF}]?(?:\u200D\p{Extended_Pictographic}\uFE0F?)*/gu;
+
+/** Removes emoji from a label. Returns the text unchanged when it has no emoji or is only an emoji (an icon). */
+export function stripEmoji(text: string): string {
+  if (!/\p{Extended_Pictographic}/u.test(text)) return text;
+  const out = text
+    .replace(EMOJI_RE, (m) => (KEEP_SYMBOLS.has(m.replace(/\uFE0F/g, '')) ? m : ''))
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+  return /[\p{L}\p{N}]/u.test(out) ? out : text;
+}
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA', 'NOSCRIPT', 'CODE']);
@@ -25,6 +50,12 @@ export function installDomTranslation(): void {
   const phraseMap = new Map(phrases);
   const phraseRe = phrases.length ? new RegExp(phrases.map(([k]) => escapeRe(k)).join('|'), 'g') : null;
   const cache = new Map<string, string>();
+  const realIt = new Map<string, string>(Object.entries(realItDict as Dict));
+  const realEn = new Map<string, string>(Object.entries(realEnDict as Dict));
+  const realLookup = (trimmed: string): string | undefined => {
+    const map = appLang === 'en' ? realEn : realIt;
+    return map.get(trimmed) ?? map.get(trimmed.replace(/\s+/g, ' ')) ?? map.get(stripEmoji(trimmed));
+  };
 
   // Templates with {0}, {1}... placeholders match whole texts built from interpolated values.
   const patterns = Object.entries(patternDict as Dict).map(([k, v]) => {
@@ -50,15 +81,21 @@ export function installDomTranslation(): void {
     const trimmed = text.trim();
     let out = text;
     if (trimmed && /[A-Za-zÀ-ÿ]/.test(trimmed)) {
-      let t = exact.get(trimmed) ?? exact.get(trimmed.replace(/\s+/g, ' '));
-      if (t === undefined) t = applyPattern(trimmed);
-      if (t === undefined && phraseRe) {
+      let t = REAL ? realLookup(trimmed) : undefined;
+      const fromReal = t !== undefined;
+      if (!fromReal && appLang === 'en') t = exact.get(trimmed) ?? exact.get(trimmed.replace(/\s+/g, ' '));
+      if (!fromReal && appLang === 'en' && t === undefined) t = applyPattern(trimmed);
+      if (!fromReal && appLang === 'en' && t === undefined && phraseRe) {
         const replaced = trimmed.replace(phraseRe, (m) => phraseMap.get(m) ?? m);
         if (replaced !== trimmed) t = replaced;
       }
-      if (t === undefined && trimmed.includes('"')) {
+      if (!fromReal && appLang === 'en' && t === undefined && trimmed.includes('"')) {
         const q = trimmed.replace(/"([^"]{2,40})"/g, (m, inner) => (exact.has(inner) ? '"' + exact.get(inner) + '"' : m));
         if (q !== trimmed) t = q;
+      }
+      if (REAL) {
+        const clean = stripEmoji(t ?? trimmed);
+        if (clean !== (t ?? trimmed)) t = clean;
       }
       if (t !== undefined) {
         const lead = text.slice(0, text.indexOf(trimmed));
@@ -174,7 +211,12 @@ export function installDomTranslation(): void {
   };
   const sync = () => {
     document.documentElement.lang = appLang;
-    if (appLang === 'en') start();
+    if (REAL) {
+      // the real app always runs the layer; on a language change it starts again from the source texts
+      stop();
+      cache.clear();
+      start();
+    } else if (appLang === 'en') start();
     else stop();
   };
 
@@ -187,7 +229,7 @@ export function installDomTranslation(): void {
     const originalFn = (window as any)[fn]?.bind(window);
     if (originalFn) {
       (window as any)[fn] = (msg?: any, ...rest: any[]) =>
-        originalFn(typeof msg === 'string' && appLang === 'en' ? translate(msg) : msg, ...rest);
+        originalFn(typeof msg === 'string' && (appLang === 'en' || REAL) ? translate(msg) : msg, ...rest);
     }
   }
 }

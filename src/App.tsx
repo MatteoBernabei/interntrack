@@ -4143,14 +4143,14 @@ export default function App() {
                 {DEMO ? (
                   <p>52 attive · 2 cose da fare oggi</p>
                 ) : (
-                  <p>{rmActive} attive · {rmToApply} da inviare</p>
+                  apps.length > 0 ? <p>{rmActive} attive · {rmToApply} da inviare</p> : <p>Nessuna candidatura. Aggiungi la prima.</p>
                 )}
               </article>
 
               <article className="card kpi">
                 <div className="k">
                   <span>Candidature attive</span>
-                  <svg className="spark" viewBox="0 0 92 34">
+                  <svg className="spark" viewBox="0 0 92 34" style={DEMO ? undefined : { display: 'none' }}>
                     <defs>
                       <filter id="gl">
                         <feGaussianBlur stdDeviation="1.6" />
@@ -4197,8 +4197,8 @@ export default function App() {
                   </>
                 ) : (
                   <>
-                    <div className="v">{rmRate}%</div>
-                    <div className="s">{rmInterviews} su {rmSent} inviate</div>
+                    <div className="v">{rmSent > 0 ? `${rmRate}%` : '—'}</div>
+                    <div className="s">{rmSent > 0 ? <>{rmInterviews} su {rmSent} inviate</> : <>Nessuna candidatura inviata</>}</div>
                   </>
                 )}
               </article>
@@ -4486,7 +4486,7 @@ export default function App() {
             <section className="card" id="last" aria-label="Ultime candidature">
               <div className="hd">
                 <h3>Ultime candidature</h3>
-                <span className="count">{apps.length} totali</span>
+                {(DEMO || apps.length > 0) && <span className="count">{apps.length} totali</span>}
                 <button className="link" onClick={() => handleGo('trk')}>
                   Apri il tracker ›
                 </button>
@@ -4588,7 +4588,7 @@ export default function App() {
               <article className="card">
                 <div className="hd">
                   <h3>Distribuzione candidature per città</h3>
-                  <span className="count">{apps.length}</span>
+                  {(DEMO || apps.length > 0) && <span className="count">{apps.length}</span>}
                   <button className="link" onClick={() => handleGo('trk')}>
                     Esplora ›
                   </button>
@@ -5582,7 +5582,7 @@ export default function App() {
               <article className="card">
                 <div className="hd" style={{ flexWrap: 'wrap', gap: '8px' }}>
                   <h3>Scadenze e Follow-up</h3>
-                  <span className="count" id="sc-n">{filteredScadenze.length} totali</span>
+                  {(DEMO || filteredScadenze.length > 0) && <span className="count" id="sc-n">{filteredScadenze.length} totali</span>}
                   <span className="sp"></span>
                   <div className="seg">
                     <button aria-pressed={pf === 'all'} onClick={() => setPf('all')}>
@@ -6123,7 +6123,7 @@ export default function App() {
                       borderColor: 'transparent',
                     }}
                   >
-                    {DEMO ? '🌟 Oggi (3 Consigliati)' : `🌟 Oggi (${dailyCompanies.length + dailyPeople.length} Consigliati)`}
+                    {DEMO ? '🌟 Oggi (3 Consigliati)' : 'Contatti di oggi'}
                   </button>
                   <button
                     type="button"
@@ -6679,7 +6679,7 @@ export default function App() {
                             {DEMO ? (
                               <>Ogni mattina invia in automatico l'email HTML alla tua casella e controlla se hai risposto dal telefono con <code>LN FATTO</code> o <code>LN SALTA</code>.</>
                             ) : (
-                              <>L'email con i contatti del giorno parte quando apri l'app con Google autorizzato, oppure dal pulsante. Per aggiornare lo stato rispondi all'email con <code>LN FATTO</code> o <code>LN SALTA</code>.</>
+                              <>L'email con i contatti del giorno parte quando apri l'app con Google autorizzato, oppure dal pulsante. Per aggiornare lo stato rispondi all'email con <code style={{ display: 'inline', padding: '2px 6px', borderRadius: '6px' }}>LN FATTO</code> o <code style={{ display: 'inline', padding: '2px 6px', borderRadius: '6px' }}>LN SALTA</code>.</>
                             )}
                           </p>
                         </div>
@@ -6708,10 +6708,18 @@ export default function App() {
                     >
                       <div>
                         <b style={{ fontSize: '13px' }}>
-                          Formula del giorno: <code>({dayOfYear}) % 3 = {catIndex}</code> → Categoria attiva: <span style={{ color: 'var(--brand)', fontWeight: 700 }}>{catName}</span>
+                          {DEMO ? (
+                            <>Formula del giorno: <code>({dayOfYear}) % 3 = {catIndex}</code> → Categoria attiva: <span style={{ color: 'var(--brand)', fontWeight: 700 }}>{catName}</span></>
+                          ) : (
+                            <>Categoria di oggi: <span style={{ color: 'var(--brand)', fontWeight: 700 }}>{catName}</span></>
+                          )}
                         </b>
                         <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--muted)' }}>
-                          0 = Azienda · 1 = Startup · 2 = Venture. Oggi il sistema estrae 3 profili di tipo <strong>{catName}</strong>.
+                          {DEMO ? (
+                            <>0 = Azienda · 1 = Startup · 2 = Venture. Oggi il sistema estrae 3 profili di tipo <strong>{catName}</strong>.</>
+                          ) : (
+                            <>La categoria cambia ogni giorno a rotazione: Azienda, Startup, Venture.</>
+                          )}
                         </p>
                       </div>
 
@@ -6796,7 +6804,9 @@ export default function App() {
                                 onClick={handlePopulateSundayHubCoda}
                                 style={{ height: '38px', padding: '0 20px', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '8px' }}
                               >
-                                {isScoutingSunday ? '⏳ Ricerca Settimanale in corso (21 aziende + 21 persone)...' : (DEMO ? '⚡ Avvia Scansione Ciclo #9 (21 Nuove Aziende & Coda)' : '⚡ Avvia Scansione (21 Nuove Aziende & Coda)')}
+                                {DEMO
+                                  ? (isScoutingSunday ? '⏳ Ricerca Settimanale in corso (21 aziende + 21 persone)...' : '⚡ Avvia Scansione Ciclo #9 (21 Nuove Aziende & Coda)')
+                                  : (isScoutingSunday ? 'Ricerca in corso…' : 'Cerca nuovi contatti')}
                               </button>
                               <button
                                 className="btn"
@@ -8324,7 +8334,9 @@ export default function App() {
                           }}
                           style={{ height: '36px', padding: '0 18px', fontSize: '12.5px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                         >
-                          {isScoutingSunday ? '⏳ Scansione in corso...' : (DEMO ? '⚡ Salva & Avvia Scansione Ciclo #9' : '⚡ Salva & Avvia Scansione')}
+                          {DEMO
+                            ? (isScoutingSunday ? '⏳ Scansione in corso...' : '⚡ Salva & Avvia Scansione Ciclo #9')
+                            : (isScoutingSunday ? 'Ricerca in corso…' : 'Salva e cerca')}
                         </button>
                       </div>
                     </div>

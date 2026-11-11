@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 // A signed-in tester with an EMPTY database. No real Firebase, no real Google.
 export const TEST_USER = {
   uid: 'test-uid',
-  email: 'tester@example.test',
+  email: 'tester@prova.test',
   displayName: 'Utente Prova',
   photoURL: null,
   emailVerified: true,
@@ -14,7 +14,7 @@ export function installFirebaseMocks() {
   vi.stubEnv('VITE_FIREBASE_API_KEY', 'test-key');
   vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'test-project');
   vi.stubEnv('VITE_FIREBASE_APP_ID', 'test-app');
-  vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', 'test.example.test');
+  vi.stubEnv('VITE_FIREBASE_AUTH_DOMAIN', 'prova.test');
   vi.stubEnv('VITE_APP_LANG', 'it');
   vi.stubEnv('VITE_ENABLE_GMAIL', 'true');
 
