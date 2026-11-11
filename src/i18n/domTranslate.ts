@@ -123,7 +123,18 @@ export function installDomTranslation(): void {
     if (!v || written.get(node) === v) return; // empty, or our own write
     const parent = node.parentElement;
     if (parent && SKIP_TAGS.has(parent.tagName)) return;
-    const t = translate(v);
+    let t = translate(v);
+    // Real app: an emoji sitting next to a label inside the same element is decoration and is removed.
+    // An emoji alone in its element is an icon and stays until it is replaced in the code.
+    if (REAL && t === v && parent && !/[\p{L}\p{N}]/u.test(v) && /\p{Extended_Pictographic}/u.test(v)
+        && !KEEP_SYMBOLS.has(v.trim().replace(/\uFE0F/g, ''))) {
+      const hasWords = (el: Element | null) => !!el && /[\p{L}\p{N}]/u.test(el.textContent || '');
+      const clickable = (el: Element) => el.tagName === 'BUTTON' || el.tagName === 'A' || el.hasAttribute('role') || el.hasAttribute('tabindex');
+      // "<button>📥 Esporta</button>"  or  "<span>☁️</span> Salva nel cloud"
+      if (hasWords(parent) || (!clickable(parent) && parent.children.length === 0 && hasWords(parent.parentElement))) {
+        t = v.replace(EMOJI_RE, '');
+      }
+    }
     if (t !== v) {
       original.set(node, v);
       written.set(node, t);

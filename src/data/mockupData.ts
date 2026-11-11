@@ -277,6 +277,16 @@ export const getCompanyLogoUrl = (coName: string): string => {
   return `https://logo.clearbit.com/${domain}`;
 };
 
+// Icon of the company's website, served by Google's public favicon service (no key needed).
+// It answers "not found" when the site has no icon, so the initials stay visible.
+// The website is taken from the known list above or, failing that, guessed as "<name>.com":
+// the guess can be wrong, which is why a logo uploaded by the user always wins.
+export const getCompanySiteIconUrl = (coName: string): string => {
+  const domain = getCompanyDomain(coName);
+  if (!domain) return '';
+  return `https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=${encodeURIComponent(`https://${domain}`)}`;
+};
+
 // Automation Gemini Models: Weekly Scans & Daily Suggestions
 export interface MockScaleupItem {
   id: string;

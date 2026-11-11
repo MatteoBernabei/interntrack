@@ -57,6 +57,7 @@ import {
   grad,
   getCompanyDomain,
   getCompanyLogoUrl,
+  getCompanySiteIconUrl,
   MockScaleupItem,
   INITIAL_SCALEUP_DATA,
   MockDailyPerson,
@@ -3219,7 +3220,8 @@ export default function App() {
     
     // Check if custom photo exists in the database
     const customPhoto = companyLogos[coKey];
-    const clearbitUrl = !customPhoto ? getCompanyLogoUrl(coName) : '';
+    // Real app: the icon of the company's website (the old logo service closed in December 2025).
+    const clearbitUrl = !customPhoto ? (DEMO ? getCompanyLogoUrl(coName) : getCompanySiteIconUrl(coName)) : '';
     const logoUrl = customPhoto || clearbitUrl;
     const initials = ini(coName) || 'EL';
 
@@ -3262,6 +3264,11 @@ export default function App() {
               loading="lazy"
               onError={(e) => {
                 (e.currentTarget as HTMLElement).style.display = 'none';
+              }}
+              onLoad={(e) => {
+                // a tiny picture is a placeholder or too blurry to be a logo: keep the initials instead
+                const img = e.currentTarget as HTMLImageElement;
+                if (!DEMO && !customPhoto && img.naturalWidth > 0 && img.naturalWidth < 32) img.style.display = 'none';
               }}
             />
           )}
@@ -4174,7 +4181,7 @@ export default function App() {
                     />
                   </svg>
                 </div>
-                <div className="v">{apps.length}</div>
+                <div className="v">{DEMO || apps.length > 0 ? apps.length : '—'}</div>
                 <div className="s">
                   {DEMO ? (
                     <>
@@ -4257,6 +4264,7 @@ export default function App() {
                       📱 Google Tasks ({DEMO ? activeWorkspaceAccount : accountsToSync().join(' · ') || 'non collegato'})
                     </span>
                   </div>
+                  {(DEMO || rmTodayCount > 0 || googleTasksList.some((t) => t.status === 'completed')) && (
                   <span className="count">
                     {DEMO ? (
                       <>{googleTasksList.filter((t) => t.status === 'completed').length + Object.values(taskDone).filter(Boolean).length} completati</>
@@ -4264,6 +4272,7 @@ export default function App() {
                       <>{rmTodayCount} da fare · {googleTasksList.filter((t) => t.status === 'completed').length} completati</>
                     )}
                   </span>
+                  )}
                   <span className="sp"></span>
                   <button className="link" onClick={() => { setCalTab('cal'); handleGo('cal'); }}>
                     Apri Calendario &amp; Tasks ›
@@ -4493,7 +4502,7 @@ export default function App() {
               </div>
               <div className="tscroll" style={{ marginTop: '12px' }}>
                 <table aria-label="Ultime candidature">
-                  <thead>
+                  <thead style={DEMO || apps.length > 0 ? undefined : { display: 'none' }}>
                     <tr>
                       <th className="c0"></th>
                       <th>Azienda &amp; ruolo</th>
@@ -4594,7 +4603,7 @@ export default function App() {
                   </button>
                 </div>
                 <table className="geo" aria-label="Candidature per città">
-                  <thead>
+                  <thead style={DEMO || apps.length > 0 ? undefined : { display: 'none' }}>
                     <tr>
                       <th>Hub</th>
                       <th>Quota su {apps.length}</th>

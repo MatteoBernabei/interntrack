@@ -172,11 +172,13 @@ export default function SearchPlanView(p: Props) {
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto', flexWrap: 'wrap' }}>
-            <span className="count">
-              {p.mode === 'all'
-                ? `${plan.total} sessioni in ${plan.days.length} giornate`
-                : `${remaining} da fare su ${sessions.length} · ~${minutes} min`}
-            </span>
+            {(p.mode === 'all' ? plan.total > 0 : sessions.length > 0) && (
+              <span className="count">
+                {p.mode === 'all'
+                  ? `${plan.total} sessioni in ${plan.days.length} giornate`
+                  : `${remaining} da fare su ${sessions.length} · ~${minutes} min`}
+              </span>
+            )}
             <button className="btn sm" onClick={p.onOpenSettings}>Modifica piano</button>
             <button className="btn pri sm" onClick={p.onAddApplication}>+ Nuova candidatura</button>
           </div>

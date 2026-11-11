@@ -46,14 +46,14 @@ const UNVERIFIED_CLAIMS: Record<'it' | 'en', Array<[string, RegExp]>> = {
 };
 
 // Italian words that should not survive on an English screen.
-const ITALIAN_WORD = /\b(il|lo|la|le|gli|di|del|della|dei|delle|per|con|che|non|sono|è|una|uno|nel|nella|tuo|tua|tuoi|tue|oggi|nessun[ao]?|candidatur[ae]|aggiungi|salva|colloqui[o]?|scadenz[ae]|posta|ricerca|impostazioni|azienda|aziende|ruolo|città|giorni|giorno|quando|oppure|anche|ogni|questo|questa|tutti|tutte|modifica|elimina|annulla|invia|apri|chiudi|settimana|mese|nuov[oaie])\b/i;
+const ITALIAN_WORD = /\b(il|lo|la|le|gli|di|del|della|dei|delle|con|che|non|sono|è|una|uno|nel|nella|tuo|tua|tuoi|oggi|nessun[ao]?|candidatur[ae]|aggiungi|salva|colloqui[o]?|scadenz[ae]|posta|ricerca|impostazioni|azienda|aziende|ruolo|città|giorni|giorno|quando|oppure|anche|ogni|questo|questa|tutti|tutte|modifica|elimina|annulla|invia|apri|chiudi|settimana|mese|nuov[oaie]|picco|offert[ae]|da fare|completat[ie]|attiv[ei]|inviat[ei]|lett[ei]|totali|sede|compenso|stato|quota|risposte|prossim[oie]|ultim[eoi]|elenco|carica|scarica|cerca|lingua|priorità|corsi|competenze|domande|punti)\b/i;
 
 const EMOJI = /\p{Extended_Pictographic}/u;
 const ALLOWED_SYMBOLS = /[✓✔●○★☆©®™↗↔▶◀▲▼⌘✕]/gu; // plain symbols, not emoji
 
 // KNOWN DEBT, can only go down. Lower these numbers whenever the count drops; never raise them.
-const MAX_EMOJI_ICONS = 12; // icons still drawn with an emoji instead of a line icon
-const MAX_ITALIAN_LEFT_IN_ENGLISH = 9; // fragments of sentences not translated yet
+const MAX_EMOJI_ICONS = 0; // icons still drawn with an emoji instead of a line icon
+const MAX_ITALIAN_LEFT_IN_ENGLISH = 1; // fragments of sentences not translated yet
 
 export function realModeChecks(lang: 'it' | 'en') {
   let pages: Record<string, string[]> = {};
