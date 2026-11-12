@@ -13,6 +13,10 @@ export interface MockApp {
   sent: string;
   prio: string;
   act: 'send' | 'follow' | 'sent' | 'eval' | 'closed';
+  // Optional details entered by the user (real app). Missing on older records.
+  url?: string;   // link to the job posting
+  desc?: string;  // text of the job description
+  notes?: string; // free notes
 }
 
 export interface MockDeadline {

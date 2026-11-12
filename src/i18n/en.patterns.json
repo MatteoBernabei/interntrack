@@ -1,4 +1,7 @@
 {
+ "5. Paesi e Città Target ({0} Paesi)": "5. Target countries and cities ({0} countries)",
+ "Analisi non riuscita (errore {0}): {1}": "Analysis failed (error {0}): {1}",
+ "Analisi non riuscita: nessuna risposta dal server ({0})": "Analysis failed: no answer from the server ({0})",
  "Salva le candidature nel cloud ({0})": "Save applications to the cloud ({0})",
  "✓ Connesso con Google: {0}": "✓ Connected with Google: {0}",
  "Logo salvato per {0}!": "Logo saved for {0}!",

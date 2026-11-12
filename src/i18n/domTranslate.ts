@@ -4,6 +4,7 @@ import { isFirebaseConfigured } from '../firebase';
 import { appLang, onLangChange } from './index';
 import realEnDict from './real.en.json';
 import realItDict from './real.it.json';
+import { CITIES, COUNTRIES } from '../data/places';
 
 // Runtime, display-only, reversible translation (Italian source → English).
 // It rewrites text nodes and a few attributes (placeholder, title, aria-label, alt) after React renders them,
@@ -52,6 +53,10 @@ export function installDomTranslation(): void {
   const cache = new Map<string, string>();
   const realIt = new Map<string, string>(Object.entries(realItDict as Dict));
   const realEn = new Map<string, string>(Object.entries(realEnDict as Dict));
+  // country and city names of the pick lists
+  for (const [it, en] of [...COUNTRIES, ...Object.values(CITIES).flat()]) {
+    if (it !== en && !realEn.has(it)) realEn.set(it, en);
+  }
   const realLookup = (trimmed: string): string | undefined => {
     const map = appLang === 'en' ? realEn : realIt;
     return map.get(trimmed) ?? map.get(trimmed.replace(/\s+/g, ' ')) ?? map.get(stripEmoji(trimmed));

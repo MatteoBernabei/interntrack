@@ -43,7 +43,7 @@ export function visibleTexts(root: ParentNode = document.body): string[] {
 }
 
 /** Renders the app, visits every page from the left rail and returns the texts seen on each. */
-export async function renderAndVisitAllPages(lang?: 'it' | 'en', inspect?: (doc: Document) => void): Promise<Record<string, string[]>> {
+export async function renderAndVisitAllPages(lang?: 'it' | 'en', inspect?: (doc: Document) => void, interact?: (doc: Document) => Promise<void>): Promise<Record<string, string[]>> {
   // With a language, the on-screen translation layer runs exactly as in the browser (see src/main.tsx).
   // Without it, the test reads the Italian source texts as written in the code.
   if (lang) {
@@ -72,6 +72,7 @@ export async function renderAndVisitAllPages(lang?: 'it' | 'en', inspect?: (doc:
     pages[label] = visibleTexts();
   }
   inspect?.(document); // extra checks on the live page, before it is removed
+  if (interact) await interact(document); // extra steps on the live page (clicks, opening panels)
   cleanup();
   return pages;
 }

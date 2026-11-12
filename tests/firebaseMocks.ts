@@ -10,6 +10,9 @@ export const TEST_USER = {
   getIdToken: async () => 'fake-id-token',
 };
 
+/** Records the fake database returns for the user's applications (empty unless a test fills it). */
+export const fakeDb: { applications: Array<Record<string, unknown> & { id: string }> } = { applications: [] };
+
 export function installFirebaseMocks() {
   vi.stubEnv('VITE_FIREBASE_API_KEY', 'test-key');
   vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'test-project');
@@ -50,7 +53,10 @@ export function installFirebaseMocks() {
       getDocs: async () => emptyQuery,
       setDoc: async () => {},
       onSnapshot: (ref: any, next: (snap: unknown) => void) => {
-        queueMicrotask(() => next(ref?.kind === 'doc' ? emptyDoc : emptyQuery));
+        const isApplications = ref?.kind === 'collection' && Array.isArray(ref.path) && ref.path.includes('applications');
+        const docs = isApplications ? fakeDb.applications.map(({ id, ...data }) => ({ id, data: () => data, exists: () => true })) : [];
+        const query = { ...emptyQuery, docs, empty: docs.length === 0, size: docs.length, forEach: (fn: (d: unknown) => void) => docs.forEach(fn) };
+        queueMicrotask(() => next(ref?.kind === 'doc' ? emptyDoc : query));
         return () => {};
       },
       writeBatch: () => ({ set() {}, delete() {}, update() {}, commit: async () => {} }),

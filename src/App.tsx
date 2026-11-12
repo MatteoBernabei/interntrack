@@ -1,3 +1,4 @@
+import { COUNTRIES, OTHER_CITY, citiesOf } from './data/places';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import SearchPlanView, { type RicProgress } from './components/SearchPlanView';
 import { buildSearchPlan, listCountries, toISODate } from './searchPlan';
@@ -129,11 +130,43 @@ const NavBadge = ({ demo, real, hot = true }: { demo: number; real: number; hot?
 };
 
 // "€1.400/m" -> 1400
-const parseComp = (v: string): number => {
+const parseCompFirstNumber = (v: string): number => {
   const m = (v || '').replace(/\./g, '').match(/\d{3,6}/);
   return m ? Number(m[0]) : 0;
 };
+// Real app: "€1.200–1.500/m" counts as its midpoint, a yearly amount is brought to a monthly one.
+const parseComp = (v: string): number => {
+  if (DEMO) return parseCompFirstNumber(v);
+  const nums = (String(v || '').match(/\d[\d.,]*/g) || [])
+    .map((n) => Number(n.replace(/[.,](?=\d{3}(\D|$))/g, '').replace(',', '.')))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (nums.length === 0) return 0;
+  const amount = nums.length >= 2 ? (nums[0] + nums[1]) / 2 : nums[0];
+  const yearly = /anno|annu|year|\/y\b|ral/i.test(v);
+  return Math.round(yearly ? amount / 12 : amount);
+};
+const fmtThousands = (n: number): string => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+/** Text stored for the compensation, built from the range typed in the form. */
+const composeComp = (cur: string, min: string, max: string, per: string): string => {
+  const a = Number(String(min).replace(/[^\d]/g, '')) || 0;
+  const b = Number(String(max).replace(/[^\d]/g, '')) || 0;
+  const lo = a && b ? Math.min(a, b) : a || b;
+  const hi = a && b ? Math.max(a, b) : 0;
+  if (!lo) return '—';
+  const sym = cur === 'CHF' ? 'CHF ' : cur;
+  return `${sym}${fmtThousands(lo)}${hi && hi !== lo ? `–${fmtThousands(hi)}` : ''}/${per === 'anno' ? 'anno' : 'm'}`;
+};
+
 const eur = (n: number): string => '€' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+// Real app: an amount keeps the currency the user typed; amounts in different currencies are never mixed.
+const compCurrency = (v: string): string => (/\$|usd/i.test(v) ? '$' : /£|gbp/i.test(v) ? '£' : /chf/i.test(v) ? 'CHF ' : '€');
+const money = (n: number, sym: string): string => sym + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+const joinParts = (...parts: Array<string | undefined>): string => parts.map((x) => (x || '').trim()).filter((x) => x && x !== '—').join(' · ') || '—';
+const safeUrl = (v?: string): string => {
+  const t = (v || '').trim();
+  if (!t) return '';
+  return /^https?:\/\//i.test(t) ? t : `https://${t}`;
+};
 
 // Placeholder used by the CV / cover letter / simulator tools while the tracker is still empty
 // Search profile used as the starting point (and for "restore defaults"). In real mode the personal fields start empty.
@@ -412,6 +445,8 @@ export default function App() {
   const rmComps = apps.map((a) => parseComp(a.comp)).filter((n) => n > 0);
   const rmAvg = rmComps.length ? Math.round(rmComps.reduce((sum, n) => sum + n, 0) / rmComps.length) : 0;
   const rmPeak = rmComps.length ? Math.max(...rmComps) : 0;
+  const rmCurrencies = [...new Set(apps.filter((a) => parseComp(a.comp) > 0).map((a) => compCurrency(a.comp)))];
+  const rmSym = rmCurrencies.length === 1 ? rmCurrencies[0] : '';
   const rmInterviewApps = apps.filter((a) => a.st === 'interview').slice(0, 3);
   const rmNextApps = apps.filter((a) => a.act === 'send' || a.act === 'follow').slice(0, 3);
   const rmToday = new Date().toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -459,7 +494,7 @@ export default function App() {
   }, [apps]);
 
   const appKey = (a: MockApp) =>
-    JSON.stringify([a.co, a.role, a.city, a.country, a.mode, a.st, a.fit, a.pl, a.nx, a.comp, a.sent, a.prio, a.act]);
+    JSON.stringify([a.co, a.role, a.city, a.country, a.mode, a.st, a.fit, a.pl, a.nx, a.comp, a.sent, a.prio, a.act, a.url || '', a.desc || '', a.notes || '']);
   const appToDoc = (uid: string, a: MockApp) => ({
     userId: uid,
     co: a.co ?? '',
@@ -475,6 +510,9 @@ export default function App() {
     sent: a.sent ?? '—',
     prio: a.prio ?? 'Media',
     act: a.act ?? 'sent',
+    url: a.url ?? '',
+    desc: a.desc ?? '',
+    notes: a.notes ?? '',
     updatedAt: new Date().toISOString(),
   });
   const docToApp = (id: string, data: any): MockApp => ({
@@ -492,6 +530,9 @@ export default function App() {
     sent: data.sent || '—',
     prio: data.prio || 'Media',
     act: data.act || 'sent',
+    url: typeof data.url === 'string' ? data.url : '',
+    desc: typeof data.desc === 'string' ? data.desc : '',
+    notes: typeof data.notes === 'string' ? data.notes : '',
   });
 
   useEffect(() => {
@@ -657,6 +698,9 @@ export default function App() {
           sent: app.sent,
           prio: app.prio,
           act: app.act,
+          url: app.url ?? '',
+          desc: app.desc ?? '',
+          notes: app.notes ?? '',
           updatedAt: new Date().toISOString(),
         });
       });
@@ -685,6 +729,9 @@ export default function App() {
   const [drawerEditMode, setDrawerEditMode] = useState<string>('');
   const [drawerEditComp, setDrawerEditComp] = useState<string>('');
   const [drawerEditPl, setDrawerEditPl] = useState<string>('');
+  const [drawerEditUrl, setDrawerEditUrl] = useState<string>('');
+  const [drawerEditDesc, setDrawerEditDesc] = useState<string>('');
+  const [drawerEditNotes, setDrawerEditNotes] = useState<string>('');
 
   // Modal state for New Application (Manual vs AI)
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -695,13 +742,21 @@ export default function App() {
   // Manual Application Form fields
   const [manCo, setManCo] = useState<string>('');
   const [manRole, setManRole] = useState<string>('');
-  const [manCity, setManCity] = useState<string>('Milano');
-  const [manCountry, setManCountry] = useState<string>('Italia');
-  const [manMode, setManMode] = useState<string>('Ibrido');
-  const [manComp, setManComp] = useState<string>('€1.200/m');
+  const [manCity, setManCity] = useState<string>(DEMO ? 'Milano' : '');
+  const [manCountry, setManCountry] = useState<string>(DEMO ? 'Italia' : '');
+  const [manMode, setManMode] = useState<string>(DEMO ? 'Ibrido' : '');
+  const [manComp, setManComp] = useState<string>(DEMO ? '€1.200/m' : '');
   const [manPl, setManPl] = useState<string>('LinkedIn');
   const [manSt, setManSt] = useState<MockApp['st']>('todo');
-  const [manPrio, setManPrio] = useState<string>('Alta');
+  const [manPrio, setManPrio] = useState<string>(DEMO ? 'Alta' : 'Media');
+  const [manUrl, setManUrl] = useState<string>('');
+  const [manCityOther, setManCityOther] = useState<boolean>(false);
+  const [manCompCur, setManCompCur] = useState<string>('€');
+  const [manCompMin, setManCompMin] = useState<string>('');
+  const [manCompMax, setManCompMax] = useState<string>('');
+  const [manCompPer, setManCompPer] = useState<string>('m');
+  const [manDesc, setManDesc] = useState<string>('');
+  const [manNotes, setManNotes] = useState<string>('');
 
   // Unmatched recruiter emails from Gmail scanning
   interface UnmatchedEmail {
@@ -838,7 +893,7 @@ export default function App() {
       co: co.name,
       role: co.targetRole,
       st: 'todo',
-      fit: 92,
+      fit: DEMO ? 92 : 0,
       city: co.city.split('/')[0].trim(),
       country: co.country,
       mode: 'In sede',
@@ -1909,7 +1964,7 @@ export default function App() {
         country: finalCountry,
         mode,
         st,
-        fit: 90,
+        fit: DEMO ? 90 : 0,
         pl,
         nx,
         comp: rawSalary ? rawSalary : '—',
@@ -2125,7 +2180,7 @@ export default function App() {
           country: item.country || item.paese || 'Italia',
           mode: item.mode || item.modalita || 'Ibrido',
           st: (['todo', 'applied', 'interview', 'offer', 'rejected'].includes(item.st) ? item.st : 'applied') as MockApp['st'],
-          fit: typeof item.fit === 'number' ? item.fit : 88,
+          fit: typeof item.fit === 'number' ? item.fit : (DEMO ? 88 : 0),
           pl: item.pl || item.piattaforma || 'LinkedIn',
           nx: Array.isArray(item.nx) && item.nx.length === 2 ? item.nx : (['⏱ In attesa feedback', 'info'] as [string, string]),
           comp: item.comp || item.salary || item.stipendio || '€1.200/m',
@@ -2404,7 +2459,25 @@ export default function App() {
     setDrawerEditMode(app.mode);
     setDrawerEditComp(app.comp);
     setDrawerEditPl(app.pl);
+    setDrawerEditUrl(app.url || '');
+    setDrawerEditDesc(app.desc || '');
+    setDrawerEditNotes(app.notes || '');
   };
+
+  // The panel can be opened from many places: keep the edit fields in step with the record shown.
+  useEffect(() => {
+    if (!drawerApp) return;
+    setDrawerEditCo(drawerApp.co);
+    setDrawerEditRole(drawerApp.role);
+    setDrawerEditCity(drawerApp.city);
+    setDrawerEditCountry(drawerApp.country);
+    setDrawerEditMode(drawerApp.mode);
+    setDrawerEditComp(drawerApp.comp);
+    setDrawerEditPl(drawerApp.pl);
+    setDrawerEditUrl(drawerApp.url || '');
+    setDrawerEditDesc(drawerApp.desc || '');
+    setDrawerEditNotes(drawerApp.notes || '');
+  }, [drawerApp?.id]);
 
   // Save changes to current drawer application
   const handleSaveDrawerEdit = () => {
@@ -2418,6 +2491,7 @@ export default function App() {
       mode: drawerEditMode.trim() || drawerApp.mode,
       comp: drawerEditComp.trim() || drawerApp.comp,
       pl: drawerEditPl.trim() || drawerApp.pl,
+      ...(DEMO ? {} : { url: safeUrl(drawerEditUrl), desc: drawerEditDesc.trim(), notes: drawerEditNotes.trim() }),
     };
     setApps((prev) => prev.map((a) => (a.id === updated.id ? updated : a)));
     setDrawerApp(updated);
@@ -2924,16 +2998,17 @@ export default function App() {
       co: coName,
       role: manRole.trim(),
       st: initialSt,
-      fit: 88,
-      city: manCity.trim() || 'Milano',
-      country: manCountry.trim() || 'Italia',
-      mode: manMode || 'In sede',
+      fit: DEMO ? 88 : 0,
+      city: manCity.trim() || (DEMO ? 'Milano' : ''),
+      country: manCountry.trim() || (DEMO ? 'Italia' : ''),
+      mode: manMode || (DEMO ? 'In sede' : ''),
       pl: manPl || 'LinkedIn',
       nx: initialNx,
-      comp: manComp.trim() || '€1.200/m',
+      comp: DEMO ? (manComp.trim() || '€1.200/m') : composeComp(manCompCur, manCompMin, manCompMax, manCompPer),
       sent: initialSt === 'applied' ? 'Oggi' : '—',
-      prio: manPrio || 'Alta',
+      prio: manPrio || (DEMO ? 'Alta' : 'Media'),
       act: initialSt === 'todo' ? 'send' : 'sent',
+      ...(DEMO ? {} : { url: safeUrl(manUrl), desc: manDesc.trim(), notes: manNotes.trim() }),
     };
 
     setApps((prev) => [newApp, ...prev]);
@@ -2953,6 +3028,10 @@ export default function App() {
     setIsModalOpen(false);
     setManCo('');
     setManRole('');
+    if (!DEMO) {
+      setManCity(''); setManCountry(''); setManMode(''); setManComp(''); setManCityOther(false); setManCompMin(''); setManCompMax('');
+      setManUrl(''); setManDesc(''); setManNotes('');
+    }
     handleGo('trk');
   };
 
@@ -3025,8 +3104,17 @@ export default function App() {
         }),
       });
 
-      const resData = await response.json();
-      if (resData.ok && resData.data) {
+      // Real app: read the answer as text first, so that a server failure can be explained to the user.
+      const rawBody = DEMO ? '' : await response.text();
+      let resData: any;
+      if (DEMO) resData = await response.json();
+      else {
+        try { resData = JSON.parse(rawBody); } catch { resData = null; }
+      }
+      if (!DEMO && (!resData || (!response.ok && !resData.ok))) {
+        const reason = resData?.message || resData?.error || (response.status === 504 ? 'il server ha impiegato troppo tempo' : 'il server non ha risposto correttamente');
+        showToast(`Analisi non riuscita (errore ${response.status}): ${reason}`);
+      } else if (resData.ok && resData.data) {
         setExtractedAiData(resData.data);
         setModalResult(true);
         showToast(`✓ Dati estratti con successo per ${resData.data.company || 'l\'azienda'}!`);
@@ -3035,7 +3123,7 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Errore analisi annuncio:', err);
-      showToast('Errore di connessione durante l\'analisi AI');
+      showToast(DEMO ? 'Errore di connessione durante l\'analisi AI' : `Analisi non riuscita: nessuna risposta dal server (${err?.message || 'rete non disponibile'})`);
     } finally {
       setIsExtractingAi(false);
     }
@@ -3049,20 +3137,22 @@ export default function App() {
     }
 
     const coName = extractedAiData.company || 'Azienda';
-    const roleName = extractedAiData.role || 'Founders Associate';
-    const cityName = extractedAiData.city || 'Milano';
-    const countryName = extractedAiData.country || 'Italia';
-    const modeName = extractedAiData.workMode || 'Ibrido';
-    const compName = extractedAiData.salary || '€1.200/m';
+    const roleName = extractedAiData.role || (DEMO ? 'Founders Associate' : 'Ruolo da completare');
+    const cityName = extractedAiData.city || (DEMO ? 'Milano' : '');
+    const countryName = extractedAiData.country || (DEMO ? 'Italia' : '');
+    const modeName = extractedAiData.workMode || (DEMO ? 'Ibrido' : '');
+    const compName = extractedAiData.salary || (DEMO ? '€1.200/m' : '—');
     const plName = extractedAiData.platform || 'LinkedIn';
-    const prioName = extractedAiData.priority || 'Alta';
+    const prioName = extractedAiData.priority || (DEMO ? 'Alta' : 'Media');
+    const pasted = modalText.trim();
+    const pastedIsUrl = /^https?:\/\//i.test(pasted);
 
     const newApp: MockApp = {
       id: `app-ai-${Date.now()}`,
       co: coName,
       role: roleName,
       st: 'todo',
-      fit: 90,
+      fit: DEMO ? 90 : 0,
       city: cityName,
       country: countryName,
       mode: modeName,
@@ -3072,6 +3162,7 @@ export default function App() {
       sent: '—',
       prio: prioName,
       act: 'send',
+      ...(DEMO ? {} : { url: pastedIsUrl ? pasted : '', desc: pastedIsUrl ? '' : pasted, notes: '' }),
     };
 
     // Auto-match with pending recruiter email if any!
@@ -3321,7 +3412,10 @@ export default function App() {
   };
 
   // Render Fit Bar
-  const renderFit = (fit: number) => (
+  const renderFit = (fit: number) => !DEMO && !(fit > 0) ? (
+    // real app: no score until the CV has really been compared with the posting
+    <span style={{ color: 'var(--muted)' }} title="Non ancora confrontato con il CV">—</span>
+  ) : (
     <div className={`fit ${fit < 80 ? 'mid' : ''}`}>
       <div className="bar">
         <i style={{ width: `${fit}%` }}></i>
@@ -4232,10 +4326,10 @@ export default function App() {
                 ) : (
                   <>
                     <div className="v">
-                      {rmAvg ? eur(rmAvg) : '—'}
+                      {rmAvg && rmSym ? money(rmAvg, rmSym) : '—'}
                       <span style={{ fontSize: '16px', color: 'var(--muted)' }}> /m</span>
                     </div>
-                    <div className="s">Picco offerta: {rmPeak ? eur(rmPeak) : '—'}</div>
+                    <div className="s">{rmCurrencies.length > 1 ? <>Compensi in valute diverse</> : <>Picco offerta: {rmPeak && rmSym ? money(rmPeak, rmSym) : '—'}</>}</div>
                   </>
                 )}
               </article>
@@ -4478,7 +4572,7 @@ export default function App() {
                   ) : (
                     rmNextApps.map((a) => (
                       <div className="sr2" key={a.id} style={{ gridTemplateColumns: '40px minmax(0,1fr) auto' }}>
-                        <span className="lg" style={{ background: grad(a.co) }} aria-hidden="true">{ini(a.co)}</span>
+                        {renderLogo(a, false, undefined, false)}
                         <div>
                           <b>{a.co}</b>
                           <span className="d">{a.role}</span>
@@ -4540,7 +4634,7 @@ export default function App() {
                           </span>
                         </td>
                         <td>{renderFit(a.fit)}</td>
-                        <td>{a.city} · {a.mode}</td>
+                        <td>{DEMO ? <>{a.city} · {a.mode}</> : joinParts(a.city, a.mode)}</td>
                         <td className="cmp">{a.comp}</td>
                         <td>
                           <span className={`nxt ${a.nx[1]}`}>{a.nx[0]}</span>
@@ -5003,7 +5097,7 @@ export default function App() {
                                   <option value="rejected">✕ Rifiutato</option>
                                 </select>
                               </td>
-                              <td>{a.city} · {a.mode}</td>
+                              <td>{DEMO ? <>{a.city} · {a.mode}</> : joinParts(a.city, a.mode)}</td>
                               <td className="cmp">{a.comp}</td>
                               <td>
                                 <span className={`nxt ${a.nx[1]}`}>{a.nx[0]}</span>
@@ -5120,7 +5214,7 @@ export default function App() {
                             </div>
                             <div className="m">
                               <span>Sede</span>
-                              <b>{a.city} · {a.mode}</b>
+                              <b>{DEMO ? <>{a.city} · {a.mode}</> : joinParts(a.city, a.mode)}</b>
                             </div>
                             <div className="m">
                               <span>Compenso</span>
@@ -8706,7 +8800,7 @@ export default function App() {
               <article className="card">
                 <div className="hd">
                   <h3>CV Match: {cvTargetApp.co}</h3>
-                  <span className="pill">Fit: {cvTargetApp.fit}%</span>
+                  {(DEMO || cvTargetApp.fit > 0) && <span className="pill">Fit: {cvTargetApp.fit}%</span>}
                 </div>
                 <div className="who" style={{ margin: '14px 0' }}>
                   <span className="avatar" style={{ width: '48px', height: '48px', minWidth: '48px', minHeight: '48px', flex: '0 0 48px' }}>
@@ -9495,9 +9589,11 @@ export default function App() {
                     <div className="hd" style={{ flexWrap: 'wrap', gap: '8px' }}>
                       <div>
                         <h4 style={{ margin: 0, fontSize: '14px' }}>{DEMO ? '5. Paesi e Città Target (14 Paesi Europei)' : `5. Paesi e Città Target (${listCountries(searchConfig).length} Paesi)`}</h4>
+                        {DEMO && (
                         <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--muted)' }}>
                           Spagna, Germania, Irlanda, Paesi Bassi, Lussemburgo, Austria, Belgio, Portogallo, Svezia, Danimarca, Svizzera, Francia, Polonia, Regno Unito, Italia
                         </p>
+                        )}
                       </div>
                       <span className="pill" style={{ marginLeft: 'auto' }}>
                         {searchConfig.cities.filter((c) => c.enabled).length} città attive
@@ -10336,6 +10432,22 @@ export default function App() {
                       />
                     </label>
                   </div>
+                  {!DEMO && (
+                    <>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px' }}>
+                        <span>Link dell'annuncio</span>
+                        <input type="url" value={drawerEditUrl} onChange={(e) => setDrawerEditUrl(e.target.value)} placeholder="https://" style={{ ...{ borderRadius: '10px', padding: '8px 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px' }, height: '34px', padding: '0 10px' }} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px' }}>
+                        <span>Descrizione dell'annuncio</span>
+                        <textarea value={drawerEditDesc} onChange={(e) => setDrawerEditDesc(e.target.value)} rows={6} placeholder="Incolla qui il testo dell'annuncio" style={{ ...{ borderRadius: '10px', padding: '8px 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px' }, resize: 'vertical' }} />
+                      </label>
+                      <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11px' }}>
+                        <span>Note</span>
+                        <textarea value={drawerEditNotes} onChange={(e) => setDrawerEditNotes(e.target.value)} rows={3} style={{ ...{ borderRadius: '10px', padding: '8px 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px' }, resize: 'vertical' }} />
+                      </label>
+                    </>
+                  )}
                   <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '6px' }}>
                     <button className="btn sm" type="button" onClick={() => setIsDrawerEditing(false)}>
                       Annulla
@@ -10349,7 +10461,7 @@ export default function App() {
                 <div className="dl">
                   <div>
                     <small>Sede</small>
-                    {drawerApp.city} · {drawerApp.country} · {drawerApp.mode}
+                    {DEMO ? <>{drawerApp.city} · {drawerApp.country} · {drawerApp.mode}</> : joinParts(drawerApp.city, drawerApp.country, drawerApp.mode)}
                   </div>
                   <div>
                     <small>Piattaforma</small>
@@ -10363,6 +10475,34 @@ export default function App() {
                     <small>Inviata il</small>
                     {drawerApp.sent}
                   </div>
+                  {!DEMO && (
+                    <>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <small>Link dell'annuncio</small>
+                        {drawerApp.url ? (
+                          <a href={safeUrl(drawerApp.url)} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--blue)', wordBreak: 'break-all' }}>Apri l'annuncio</a>
+                        ) : (
+                          <button className="link" type="button" onClick={() => setIsDrawerEditing(true)}>Aggiungi il link</button>
+                        )}
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <small>Descrizione dell'annuncio</small>
+                        {drawerApp.desc ? (
+                          <p style={{ margin: 0, whiteSpace: 'pre-wrap', maxHeight: '220px', overflow: 'auto', fontSize: '12.5px', lineHeight: 1.5 }}>{drawerApp.desc}</p>
+                        ) : (
+                          <button className="link" type="button" onClick={() => setIsDrawerEditing(true)}>Aggiungi la descrizione</button>
+                        )}
+                      </div>
+                      <div style={{ gridColumn: '1 / -1' }}>
+                        <small>Note</small>
+                        {drawerApp.notes ? (
+                          <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12.5px', lineHeight: 1.5 }}>{drawerApp.notes}</p>
+                        ) : (
+                          <button className="link" type="button" onClick={() => setIsDrawerEditing(true)}>Aggiungi una nota</button>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -10562,6 +10702,7 @@ export default function App() {
               </label>
             </div>
 
+            {DEMO ? (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
                 <span>Città / Sede</span>
@@ -10599,6 +10740,51 @@ export default function App() {
                 />
               </label>
             </div>
+            ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
+                <span>Paese</span>
+                <select
+                  value={manCountry}
+                  onChange={(e) => { setManCountry(e.target.value); setManCity(''); setManCityOther(false); }}
+                  style={{ height: '36px', borderRadius: '10px', padding: '0 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px', minWidth: 0 }}
+                >
+                  <option value="">—</option>
+                  {[...COUNTRIES].sort((x, y) => x[0].localeCompare(y[0], 'it')).map(([name]) => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
+                <span>Città</span>
+                {citiesOf(manCountry).length > 0 && !manCityOther ? (
+                  <select
+                    value={manCity}
+                    onChange={(e) => {
+                      if (e.target.value === OTHER_CITY) { setManCityOther(true); setManCity(''); }
+                      else setManCity(e.target.value);
+                    }}
+                    style={{ height: '36px', borderRadius: '10px', padding: '0 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px', minWidth: 0 }}
+                  >
+                    <option value="">—</option>
+                    {citiesOf(manCountry).map(([name]) => (
+                      <option key={name} value={name}>{name}</option>
+                    ))}
+                    <option value={OTHER_CITY}>Altra città…</option>
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={manCity}
+                    onChange={(e) => setManCity(e.target.value)}
+                    disabled={!manCountry}
+                    placeholder={manCountry ? 'Scrivi la città' : 'Scegli prima il paese'}
+                    style={{ height: '36px', borderRadius: '10px', padding: '0 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px', minWidth: 0 }}
+                  />
+                )}
+              </label>
+            </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
@@ -10608,12 +10794,14 @@ export default function App() {
                   onChange={(e) => setManMode(e.target.value)}
                   style={{ height: '36px', borderRadius: '10px' }}
                 >
+                  {!DEMO && <option value="">—</option>}
                   <option value="In sede">In sede</option>
                   <option value="Ibrido">Ibrido</option>
                   <option value="Remoto">Remoto</option>
                 </select>
               </label>
 
+              {DEMO ? (
               <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
                 <span>Compenso mensile</span>
                 <input
@@ -10631,6 +10819,25 @@ export default function App() {
                   }}
                 />
               </label>
+              ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px', minWidth: 0 }} role="group" aria-label="Compenso indicativo">
+                <span>Compenso indicativo</span>
+                <div style={{ display: 'grid', gridTemplateColumns: '64px 1fr 1fr 84px', gap: '6px' }}>
+                  <select aria-label="Valuta" value={manCompCur} onChange={(e) => setManCompCur(e.target.value)} style={{ height: '36px', borderRadius: '10px', padding: '0 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px', minWidth: 0 }}>
+                    <option value="€">€</option>
+                    <option value="$">$</option>
+                    <option value="£">£</option>
+                    <option value="CHF">CHF</option>
+                  </select>
+                  <input aria-label="Compenso minimo" inputMode="numeric" value={manCompMin} onChange={(e) => setManCompMin(e.target.value)} placeholder="Minimo" style={{ height: '36px', borderRadius: '10px', padding: '0 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px', minWidth: 0 }} />
+                  <input aria-label="Compenso massimo" inputMode="numeric" value={manCompMax} onChange={(e) => setManCompMax(e.target.value)} placeholder="Massimo" style={{ height: '36px', borderRadius: '10px', padding: '0 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px', minWidth: 0 }} />
+                  <select aria-label="Periodo" value={manCompPer} onChange={(e) => setManCompPer(e.target.value)} style={{ height: '36px', borderRadius: '10px', padding: '0 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px', minWidth: 0 }}>
+                    <option value="m">al mese</option>
+                    <option value="anno">all'anno</option>
+                  </select>
+                </div>
+              </div>
+              )}
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
@@ -10678,6 +10885,40 @@ export default function App() {
                 </select>
               </label>
             </div>
+
+            {!DEMO && (
+              <>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
+                  <span>Link dell'annuncio</span>
+                  <input
+                    type="url"
+                    value={manUrl}
+                    onChange={(e) => setManUrl(e.target.value)}
+                    placeholder="https://"
+                    style={{ ...{ borderRadius: '10px', padding: '8px 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px' }, height: '36px', padding: '0 10px' }}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
+                  <span>Descrizione dell'annuncio</span>
+                  <textarea
+                    value={manDesc}
+                    onChange={(e) => setManDesc(e.target.value)}
+                    rows={4}
+                    placeholder="Incolla qui il testo dell'annuncio"
+                    style={{ ...{ borderRadius: '10px', padding: '8px 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px' }, resize: 'vertical' }}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '11.5px' }}>
+                  <span>Note</span>
+                  <textarea
+                    value={manNotes}
+                    onChange={(e) => setManNotes(e.target.value)}
+                    rows={2}
+                    style={{ ...{ borderRadius: '10px', padding: '8px 10px', border: '1px solid var(--rim)', background: 'var(--field)', color: 'var(--text)', font: 'inherit', fontSize: '13px' }, resize: 'vertical' }}
+                  />
+                </label>
+              </>
+            )}
 
             {/* Hint if company matches pending recruiter email */}
             {manCo.trim() &&
